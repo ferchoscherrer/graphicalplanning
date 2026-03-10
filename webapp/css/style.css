@@ -1,0 +1,291 @@
+/* --- CONTENEDOR PRINCIPAL --- */
+.gantt-master-container {
+    position: relative;
+    min-width: 3720px;
+    background-image: linear-gradient(to right, #e0e0e0 1px, transparent 1px);
+    background-size: 120px 100%;
+    min-height: 500px;
+}
+
+/* --- HEADER DE FECHAS --- */
+.gantt-header {
+    display: flex;
+    height: 60px;
+    background-color: #f4f4f4;
+    border-bottom: 2px solid #d0d0d0;
+    width: 3720px; /* Mismo ancho que el contenedor de barras */
+    
+    /* ESTO LO HACE FIJO AL SCROLL VERTICAL */
+    position: sticky;
+    top: 0;
+    z-index: 100; /* Por encima de las barras */
+}
+
+.header-day {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid #e0e0e0;
+    background-color: #fdfdfd;
+}
+
+.day-num { font-weight: bold; font-size: 1.2rem; color: #34495e; }
+.day-name { font-size: 0.7rem; color: #7f8c8d; text-transform: uppercase; }
+
+/* --- JERARQUÍA: MECÁNICOS --- */
+.gantt-tech-header {
+    background-color: #34495e;
+    color: white;
+    padding: 10px 15px;
+    font-weight: bold;
+    width: 3720px;
+    
+    position: sticky;
+    left: 0;
+    z-index: 50; /* Por debajo del header de días (100) pero sobre las barras */
+    
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.gantt-tech-header:hover {
+    background-color: #2c3e50;
+}
+
+.collapse-icon {
+    display: inline-block;
+    transition: transform 0.3s ease;
+    font-size: 0.8rem;
+}
+
+/* Estado rotado cuando está colapsado */
+.collapsed .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+/* --- FILAS Y BARRAS --- */
+.gantt-row-custom {
+    height: 80px;
+    position: relative;
+    border-bottom: 1px solid #f0f0f0;
+    background-color: rgba(255,255,255,0.8);
+    border-left: 15px solid #34495e; /* Identación visual */
+    transition: all 0.2s;
+}
+
+/* Ocultar filas colapsadas */
+.row-collapsed {
+    display: none !important;
+}
+
+.gantt-bar-custom {
+    position: absolute;
+    height: 60px;
+    top: 10px;
+    border-radius: 6px;
+    color: white;
+    padding: 0 12px;
+    font-family: "72", Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+    cursor: grab;
+    transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+    overflow: hidden;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+.gantt-bar-custom:active {
+    opacity: 0.6;
+    cursor: grabbing;
+    z-index: 1000;
+}
+
+.gantt-bar-custom:hover {
+    background-color: rgba(52, 152, 219, 0.05)
+}
+
+/* --- ESTADOS DE BARRAS --- */
+.completed { background: linear-gradient(90deg, #27ae60, #2ecc71); border-left: 5px solid #1e8449; }
+.in_progress { background: linear-gradient(90deg, #2980b9, #3498db); border-left: 5px solid #1a5276; }
+.pending { background: linear-gradient(90deg, #f39c12, #f1c40f); border-left: 5px solid #b7791f; }
+
+.bar-title { font-weight: bold; font-size: 0.85rem; pointer-events: none; }
+.bar-id { font-size: 0.7rem; opacity: 0.9; pointer-events: none; }
+
+/* --- TOOLTIP Y OTROS --- */
+.gantt-tooltip {
+    position: fixed;
+    padding: 8px 14px;
+    background: rgba(44, 62, 80, 0.95);
+    color: white;
+    border-radius: 5px;
+    font-size: 0.85rem;
+    pointer-events: none;
+    z-index: 9999;
+    display: none;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+    border: 1px solid #3498db;
+}
+
+.gantt-tooltip b {
+    color: #3498db;
+}
+/* Línea vertical de Hoy */
+.gantt-today-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: #e74c3c; /* Rojo SAP */
+    z-index: 10;
+    pointer-events: none; /* Permite hacer clic a través de la línea */
+}
+
+/* Etiqueta "Hoy" en la parte superior */
+.today-label {
+    position: absolute;
+    top: -25px;
+    left: -15px;
+    background-color: #e74c3c;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: bold;
+}
+
+/* Opcional: un pequeño círculo en la base de la etiqueta */
+.today-label::after {
+    content: "";
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    margin-left: -4px;
+    border-width: 4px 4px 0;
+    border-style: solid;
+    border-color: #e74c3c transparent transparent;
+}
+
+.header-day {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    border-right: 1px solid #d0d0d0;
+    height: 100%;
+}
+
+.month-indicator {
+    position: absolute;
+    top: 2px;
+    left: 5px;
+    font-size: 0.6rem;
+    font-weight: bold;
+    color: #3498db;
+    pointer-events: none;
+}
+
+.weekend {
+    background-color: #ebebeb; /* Color diferente para sábados y domingos */
+}
+
+.week-indicator {
+    position: absolute;
+    bottom: 2px;
+    right: 5px;
+    font-size: 0.6rem;
+    font-weight: bold;
+    color: #27ae60; /* Color verde para diferenciar del mes */
+    background: rgba(39, 174, 96, 0.1);
+    padding: 1px 4px;
+    border-radius: 3px;
+    pointer-events: none;
+}
+
+.month-indicator {
+    position: absolute;
+    top: 2px;
+    left: 5px;
+    font-size: 0.6rem;
+    font-weight: bold;
+    color: #3498db;
+    pointer-events: none;
+}
+
+.header-day {
+    position: relative;
+    height: 60px; /* Asegúrate de que tenga altura para ambas etiquetas */
+}
+
+/* --- COLORES PARA USER STATUS (Prioridad Alta) --- */
+.status-u100 { background-color: #f1c40f !important; border-left: 5px solid #d4ac0d; } /* Amarillo */
+.status-u200 { background-color: #3498db !important; border-left: 5px solid #2980b9; } /* Azul */
+.status-u300 { background-color: #2ecc71 !important; border-left: 5px solid #27ae60; } /* Esmeralda */
+.status-u400 { background-color: #9b59b6 !important; border-left: 5px solid #8e44ad; } /* Púrpura */
+
+/* --- COLORES PARA SYS STATUS (Prioridad Baja / Fallback) --- */
+.status-abie { 
+    background-color: #fef9e7 !important; /* Fondo amarillo crema (Warning) */
+    color: #b9770e !important;            /* Texto naranja/café oscuro para legibilidad */
+    border: 1px solid #f1c40f !important;  /* Borde amarillo intenso */
+    border-left: 5px solid #f1c40f !important; /* Acento lateral más grueso para resaltar */
+}
+.status-abie .bar-id {
+    color: #b9770e; /* Un tono café/naranja oscuro para que contraste con el fondo amarillo */
+}
+.status-default { background-color: #bdc3c7 !important; }
+
+/* Contenedor de la leyenda */
+.gantt-legend {
+    padding: 10px;
+    background-color: #f7f7f7;
+    border-bottom: 1px solid #ddd;
+    gap: 20px;
+}
+
+/* Items individuales */
+.legend-item {
+    margin-right: 15px;
+}
+
+/* El cuadrito de color */
+.legend-box {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px; /* Para el emoji de ABIE */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* Ajuste específico para que el texto de la leyenda no sea gigante */
+.legend-item bdi {
+    font-size: 0.85rem !important;
+    color: #666;
+}
+
+/* Estilo para órdenes bloqueadas */
+.order-locked {
+    opacity: 0.85;
+    cursor: not-allowed !important;
+}
+
+/* Opcional: un pequeño efecto de candado visual */
+.order-locked::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    right: 5px;
+    font-size: 10px;
+}
