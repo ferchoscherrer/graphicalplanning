@@ -18,7 +18,14 @@
           "odataVersion": "2.0",
           "localUri": "localService/metadata.xml"
         }
-      }
+      },
+      "rescheduleService": {
+    "uri": "/sap/opu/odata/sap/ZCS_RESCHEDULE_WORKORDER_SRV/",
+    "type": "OData",
+    "settings": {
+      "odataVersion": "2.0"
+    }
+  }
     },
     "sourceTemplate": {
       "id": "@sap/generator-fiori:basic",
@@ -64,6 +71,16 @@
       },
       "": {
         "dataSource": "mainService",
+        "settings": {
+          "defaultOperationMode": "Server",
+          "defaultBindingMode": "TwoWay",
+          "metadataUrlParams": {
+                    "sap-language": "ES"
+                }
+        }
+      },
+      "reschedule": {
+        "dataSource": "rescheduleService",
         "settings": {
           "defaultOperationMode": "Server",
           "defaultBindingMode": "TwoWay",

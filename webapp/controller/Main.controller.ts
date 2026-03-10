@@ -7,6 +7,11 @@ import MessageBox from "sap/m/MessageBox";
 import ERP from "../modules/ERP"; 
 import DateRangeSelection from "sap/m/DateRangeSelection";
 import MessageToast from "sap/m/MessageToast";
+import Button from "sap/m/Button";
+import ODataModel from "sap/ui/model/odata/v2/ODataModel";
+import MessageView from "sap/m/MessageView";
+import MessageItem from "sap/m/MessageItem";
+import Dialog from "sap/m/Dialog";
 
 
 
@@ -16,6 +21,22 @@ import MessageToast from "sap/m/MessageToast";
 export default class Main extends Controller {
 
     private oDataModel: any; // Tu ODataModel principal
+    private _aPendingChanges: any[] = [];
+    private ZCS_RESCHEDULE_WORKORDER_SRV: ODataModel;
+    private oRescheduleModel: any;
+    private _resetUI(): void {
+    const oBtnSave = this.byId("btnSave") as Button;
+    const oBtnReset = this.byId("btnReset") as Button;
+    
+    if (oBtnSave) {
+        oBtnSave.setEnabled(false);
+        oBtnSave.setText("Guardar Cambios");
+    }
+    
+    if (oBtnReset) {
+        oBtnReset.setEnabled(false);
+    }
+}
 /*
     public onInit(): void {
         const today = new Date();
@@ -102,6 +123,7 @@ public onInit(): void {
     const oComponent = this.getOwnerComponent();
     if (oComponent) {
         this.oDataModel = oComponent.getModel();
+        this.oRescheduleModel = oComponent.getModel("reschedule");
     }
 
     // 5. Carga inicial de datos
@@ -162,11 +184,15 @@ private async _loadDashboardData(): Promise<void> {
         
         if (oResponse?.data?.results) {
             console.log("Datos de SAP recibidos:", oResponse.data.results.length);
+            console.log("Datos de SAP recibidos:", oResponse.data.results);
 
             const aMappedOrders: MaintenanceOrder[] = oResponse.data.results.map((sapItem: any) => {
+
+                const dStartRaw = new Date(sapItem.StartDate);
+                const dEndRaw = new Date(sapItem.FinishDate);
+                const dStart = new Date(dStartRaw.getTime() + dStartRaw.getTimezoneOffset() * 60000);
+                const dEnd = new Date(dEndRaw.getTime() + dEndRaw.getTimezoneOffset() * 60000);
                 // Limpieza de fechas para evitar desfases de horas en las barras
-                const dStart = new Date(sapItem.StartDate);
-                const dEnd = new Date(sapItem.FinishDate);
                 dStart.setHours(0, 0, 0, 0);
                 dEnd.setHours(0, 0, 0, 0);
                 
@@ -315,12 +341,14 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
     let iDurationDays = this._getDaysDiff(oOrder.start, oOrder.end);
     if (iDurationDays <= 0) iDurationDays = 1;
 
+    const bHasPendingChanges = this._aPendingChanges && 
+                               this._aPendingChanges.some(c => c.Orderid === oOrder.id.padStart(12, '0'));
     const oBar = document.createElement("div");
     
     // LÓGICA DE BLOQUEO: Si el estatus empieza con "status-u" (Estatus de usuario 100, 200, etc.)
     const bIsLocked = oOrder.status.startsWith("status-u");
-    
-    oBar.className = `gantt-bar-custom ${oOrder.status} ${bIsLocked ? "order-locked" : ""}`;
+    oBar.className = `gantt-bar-custom ${oOrder.status} ${bIsLocked ? "order-locked" : ""} ${bHasPendingChanges ? "order-changed" : ""}`;
+  //  oBar.className = `gantt-bar-custom ${oOrder.status} ${bIsLocked ? "order-locked" : ""}`;
     
     // Solo es arrastrable si NO está bloqueado
     oBar.draggable = !bIsLocked;
@@ -368,6 +396,11 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
         oTodayLine.innerHTML = `<span class="today-label">Hoy</span>`;
         
         oContainer.appendChild(oTodayLine);
+        const oSearchField = this.byId("searchOrders") as any;
+if (oSearchField && oSearchField.getValue()) {
+    // Disparamos manualmente el filtro para aplicar sobre el nuevo DOM
+    this.onSearchGantt({ getParameter: () => oSearchField.getValue() });
+}
     }
 }
     // ESTA ES LA FUNCIÓN QUE FALTABA
@@ -415,7 +448,7 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
         };
     }
 
-    private _onDropOrder(e: DragEvent, newTechnician: string): void {
+   private _onDropOrder(e: DragEvent, newTechnician: string): void {
     e.preventDefault();
     const orderId = e.dataTransfer?.getData("orderId");
     if (!orderId) return;
@@ -425,8 +458,7 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
     const oOrder = aOrders.find(o => o.id === orderId);
 
     if (oOrder) {
-        // --- VALIDACIÓN DE BLOQUEO POR ESTATUS ---
-        // Si la orden ya tiene un estatus de usuario (100, 200, 300, 400), bloqueamos el movimiento
+        // --- 1. VALIDACIÓN DE BLOQUEO POR ESTATUS ---
         if (oOrder.status && oOrder.status.startsWith("status-u")) {
             MessageToast.show("No se puede mover: La orden ya tiene un estatus de gestión.");
             return;
@@ -439,41 +471,91 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
         const rect = oContainer.getBoundingClientRect();
         const iDayWidth = 120;
         
-        // 1. Calculamos la posición X relativa al contenedor
+        // 2. CÁLCULOS DE POSICIÓN X RELATIVA
         const x = e.clientX - rect.left - cursorOffsetX;
-        
-        // 2. Lógica de Precisión (Snap)
         const newDayOffset = Math.floor((x + (iDayWidth / 2)) / iDayWidth);
-
         const dStartProject = oModel.getProperty("/startDateProject");
         
-        // 3. Cálculo de duración original (Garantizamos mínimo 1 día)
+        // 3. CÁLCULO DE DURACIÓN ORIGINAL
         let durationDays = this._getDaysDiff(oOrder.start, oOrder.end);
         if (durationDays <= 0) durationDays = 1;
 
-        // 4. Asignación de nuevas fechas normalizadas
-        const newStart = new Date(dStartProject);
+        // 4. ASIGNACIÓN DE NUEVAS FECHAS (Ajuste Anti-Desfase)
+        // Usamos getTime() para clonar la fecha base y evitar mutaciones
+        const newStart = new Date(dStartProject.getTime());
         newStart.setDate(dStartProject.getDate() + newDayOffset);
-        newStart.setHours(0, 0, 0, 0);
         
-        const newEnd = new Date(newStart);
+        /** * FIX CRÍTICO: Seteamos a las 12:00 PM. 
+         * Si tu zona horaria (México) resta 6 horas al enviar a SAP, 
+         * la fecha llegará como las 06:00 AM del MISMO DÍA en lugar de las 18:00 del día anterior.
+         */
+        newStart.setHours(12, 0, 0, 0);
+        
+        const newEnd = new Date(newStart.getTime());
         newEnd.setDate(newStart.getDate() + durationDays);
-        newEnd.setHours(0, 0, 0, 0);
+        newEnd.setHours(12, 0, 0, 0);
 
-        // 5. Actualización del objeto y del modelo
+        // 5. ACTUALIZACIÓN DEL MODELO LOCAL
         oOrder.start = newStart;
         oOrder.end = newEnd;
         oOrder.technician = newTechnician;
-
         oModel.setProperty("/orders", aOrders);
-        
-        // 6. Refrescar visualmente el Gantt
+
+        // --- 6. REGISTRO DE CAMBIOS PARA SAP (JSON PREVIEW) ---
+        const oChange = {
+            Orderid: oOrder.id.padStart(12, '0'),
+            StartDate: newStart, 
+            FinishDate: newEnd,
+            IdMecanico: oOrder.technician 
+        };
+
+        if (!this._aPendingChanges) { this._aPendingChanges = []; }
+        this._aPendingChanges = this._aPendingChanges.filter(c => c.Orderid !== oChange.Orderid);
+        this._aPendingChanges.push(oChange);
+
+        // Actualización visual del botón de guardar
+        const oBtnSave = this.byId("btnSave") as Button;
+        const oBtnReset = this.byId("btnReset") as Button;
+        if (oBtnSave) {
+            oBtnSave.setEnabled(true);
+            oBtnSave.setText(`Guardar Cambios (${this._aPendingChanges.length})`);
+        }
+        if (oBtnReset) {
+    oBtnReset.setEnabled(true);
+}
+
+        // 7. REFRESCAR GANTT
         this._renderCustomGantt();
         
-        MessageToast.show(`Orden ${orderId} movida al día ${newStart.getDate()} con el técnico ${newTechnician}`);
-        console.log(`Orden ${orderId} movida al día ${newStart.getDate()} con el técnico ${newTechnician}`);
+        MessageToast.show(`Orden ${oOrder.id} preparada para el día ${newStart.getDate()}`);
+        console.log("Cambio registrado (Safe Date):", oChange);
     }
 }
+public onResetChanges(): void {
+    if (this._aPendingChanges.length === 0) return;
+
+    MessageBox.confirm("¿Estás seguro de descartar todos los cambios realizados? Se perderán los movimientos no guardados.", {
+        title: "Confirmar Descarte",
+        actions: [MessageBox.Action.YES, MessageBox.Action.NO],
+        onClose: (oAction: string | null) => {
+            if (oAction === MessageBox.Action.YES) {
+                // 1. Limpiar el arreglo de cambios
+                this._aPendingChanges = [];
+
+                // 2. Deshabilitar botones
+                (this.byId("btnSave") as Button).setEnabled(false);
+                (this.byId("btnSave") as Button).setText("Guardar");
+                (this.byId("btnReset") as Button).setEnabled(false);
+
+                // 3. Recargar datos originales de SAP
+                this._loadDashboardData();
+                
+                MessageToast.show("Cambios descartados.");
+            }
+        }
+    });
+}
+
     private _renderHeader(dStart: Date): void {
     const oHeader = document.getElementById("ganttHeader");
     const oRange = this.byId("rangeSelection") as any;
@@ -534,6 +616,105 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
     }
 }
 
+private _formatDateSAP(oDate: Date): string {
+    const y = oDate.getFullYear();
+    const m = ("0" + (oDate.getMonth() + 1)).slice(-2);
+    const d = ("0" + oDate.getDate()).slice(-2);
+    return `${y}${m}${d}`;
+}
+
+public async onSaveSAP(): Promise<void> {
+    if (this._aPendingChanges.length === 0) return;
+
+    const oPlanModel = this.getView()!.getModel("plan") as JSONModel;
+    oPlanModel.setProperty("/isBusy", true);
+
+    const oPayload = {
+        "WorkOrderHeader": { "Supervisor": "miguel.hernandez@tellus-technologies.com" },
+        "WorkOrderItemsSet": this._aPendingChanges.map(change => {
+            let sMecId = "";
+            const sOriginalMec = change.IdMecanico || "";
+            if (sOriginalMec !== "" && sOriginalMec !== "Sin Asignar") {
+                const oMatch = sOriginalMec.match(/\(([^)]+)\)/);
+                sMecId = oMatch ? oMatch[1] : sOriginalMec;
+            }
+            return {
+                "OrderId": change.Orderid,
+                "OrderItem": "",
+                "FechaIni": this._formatDateSAP(change.StartDate),
+                "FechaFin": this._formatDateSAP(change.FinishDate),
+                "Mecanico": sMecId
+            };
+        }),
+        "ReturnSet": []
+    };
+
+   try {
+    // 1. Guardamos la lista de IDs modificados antes de limpiar el arreglo
+    const aModifiedIds = this._aPendingChanges.map(o => o.Orderid.replace(/^0+/, ""));
+    const sOrdersList = aModifiedIds.join(", ");
+
+    // 2. LLAMADA POST AL ERP
+    const oResponse: any = await ERP.createDataERP("/WorkOrderHeaderSet", this.oRescheduleModel, oPayload);
+
+    // 3. MOSTRAR RESULTADOS
+    if (oResponse && oResponse.ReturnSet && oResponse.ReturnSet.results && oResponse.ReturnSet.results.length > 0) {
+        // Si SAP devolvió mensajes detallados (ERRORES/WARNINGS), usamos el diálogo profesional
+        this._showSapReturnMessages(oResponse.ReturnSet.results);
+    } else {
+        // Si no hay mensajes de error, mostramos un resumen de lo que se guardó
+        MessageBox.success(`Se actualizaron correctamente las siguientes órdenes: \n\n ${sOrdersList}`, {
+            title: "Cambios Guardados"
+        });
+    }
+
+    // 4. LIMPIEZA Y REFRESCO
+    this._aPendingChanges = [];
+    this._resetUI();
+    this._loadDashboardData();
+
+} catch (oError: any) {
+        console.error("Error SAP:", oError);
+        MessageBox.error("No se pudieron guardar los cambios. Revise la consola.");
+    } finally {
+        oPlanModel.setProperty("/isBusy", false);
+    }
+}
+
+private _showSapReturnMessages(aReturnSet: any[]): void {
+    if (!aReturnSet || aReturnSet.length === 0) return;
+
+    const aMessageItems = aReturnSet.map(msg => {
+        let sType: any = "Information";
+        if (msg.Type === "E") sType = "Error";
+        if (msg.Type === "S") sType = "Success";
+        if (msg.Type === "W") sType = "Warning";
+
+        return new MessageItem({
+            type: sType,
+            title: msg.Message || "Sin mensaje",
+            subtitle: msg.Id ? `Clase: ${msg.Id} - Nº: ${msg.Number}` : "",
+            description: `Orden: ${msg.MessageV1 || "N/A"}`
+        });
+    });
+
+    const oMessageView = new MessageView({ items: aMessageItems });
+
+    const oDialog = new Dialog({
+        title: "Respuesta del Sistema SAP",
+        content: oMessageView,
+        beginButton: new Button({
+            text: "Cerrar",
+            press: () => oDialog.close()
+        }),
+        contentHeight: "400px",
+        contentWidth: "500px",
+        verticalScrolling: true
+    });
+
+    oDialog.open();
+}
+
 // Función auxiliar para obtener el número de semana
 private _getWeekNumber(d: Date): number {
     const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -547,5 +728,68 @@ private _getWeekNumber(d: Date): number {
     const diffInMs = endDate.getTime() - startDate.getTime();
     // Para el offset de la línea usamos floor para obtener días transcurridos exactos
     return Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+}
+
+public onSearchGantt(oEvent: any): void {
+    const sQuery = oEvent.getParameter("newValue").toLowerCase();
+    const oContainer = document.getElementById("realGanttId");
+    if (!oContainer) return;
+
+    // Obtenemos todas las filas de órdenes
+    const aRows = oContainer.getElementsByClassName("gantt-row-custom");
+
+    for (let i = 0; i < aRows.length; i++) {
+        const oRow = aRows[i] as HTMLElement;
+        const oBar = oRow.querySelector(".gantt-bar-custom") as HTMLElement;
+        
+        if (!oBar) continue;
+
+        // Extraemos el texto de la barra para comparar (ID, Equipo, Cliente)
+        const sContent = oBar.innerText.toLowerCase();
+
+        if (sContent.includes(sQuery)) {
+            // Si coincide, mostramos la fila con opacidad normal
+            oRow.style.display = "flex";
+            oBar.style.opacity = "1";
+            if (sQuery !== "") {
+                oBar.style.boxShadow = "0 0 15px #ccff00"; // Brillo especial si hay búsqueda activa
+            } else {
+                oBar.style.boxShadow = "none";
+            }
+        } else {
+            // Si no coincide, podemos ocultar la fila o bajar la opacidad
+            // Opción A: Ocultar completamente
+            oRow.style.display = "none";
+            
+            // Opción B: Mostrar tenue (si prefieres no mover el scroll)
+            // oRow.style.opacity = "0.1"; 
+        }
+    }
+
+    // También debemos manejar los encabezados de los técnicos
+    this._updateTechHeadersVisibility();
+}
+
+/**
+ * Oculta los encabezados de mecánicos que no tengan órdenes visibles
+ */
+private _updateTechHeadersVisibility(): void {
+    const aHeaders = document.getElementsByClassName("gantt-tech-header");
+    for (let i = 0; i < aHeaders.length; i++) {
+        const oHeader = aHeaders[i] as HTMLElement;
+        let oNextElement = oHeader.nextElementSibling as HTMLElement;
+        let bHasVisibleOrders = false;
+
+        // Revisamos las filas siguientes hasta el próximo encabezado
+        while (oNextElement && !oNextElement.classList.contains("gantt-tech-header")) {
+            if (oNextElement.style.display !== "none") {
+                bHasVisibleOrders = true;
+                break;
+            }
+            oNextElement = oNextElement.nextElementSibling as HTMLElement;
+        }
+
+        oHeader.style.display = bHasVisibleOrders ? "flex" : "none";
+    }
 }
 }

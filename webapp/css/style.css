@@ -289,3 +289,17 @@
     right: 5px;
     font-size: 10px;
 }
+
+.order-changed {
+    border: 3px dashed #ff5500 !important; /* Naranja fuerte */
+    box-shadow: 0 0 15px rgba(255, 85, 0, 0.6);
+    animation: pulse-border-orange 1.5s infinite;
+    z-index: 10;
+    box-sizing: border-box;
+}
+
+@keyframes pulse-border-orange {
+    0% { outline: 3px solid rgba(255, 85, 0, 0.3); outline-offset: 0px; }
+    50% { outline: 3px solid rgba(255, 85, 0, 0.8); outline-offset: 5px; }
+    100% { outline: 3px solid rgba(255, 85, 0, 0.3); outline-offset: 0px; }
+}
