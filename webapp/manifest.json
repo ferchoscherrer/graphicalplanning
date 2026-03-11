@@ -27,6 +27,20 @@
     }
   }
     },
+    "crossNavigation": {
+      "inbounds": {
+        "planning-display": {
+          "semanticObject": "graphicalPlanning",
+          "action": "display",
+          "title": "{{planning-display.flpTitle}}",
+          "subTitle": "{{planning-display.flpSubtitle}}",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
+        }
+      }
+    },
     "sourceTemplate": {
       "id": "@sap/generator-fiori:basic",
       "version": "1.20.4",
@@ -71,8 +85,9 @@
       },
       "": {
         "dataSource": "mainService",
+        "preload": true,
         "settings": {
-          "defaultOperationMode": "Server",
+          "useBatch": true,
           "defaultBindingMode": "TwoWay",
           "metadataUrlParams": {
                     "sap-language": "ES"
@@ -80,9 +95,10 @@
         }
       },
       "reschedule": {
+        "preload": true,
         "dataSource": "rescheduleService",
         "settings": {
-          "defaultOperationMode": "Server",
+          "useBatch": true,
           "defaultBindingMode": "TwoWay",
           "metadataUrlParams": {
                     "sap-language": "ES"

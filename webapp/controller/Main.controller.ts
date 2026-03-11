@@ -106,6 +106,7 @@ public onInit(): void {
         isBusy: true
     });
     this.getView()!.setModel(oViewModel, "plan");
+    this.getView()!.setBusyIndicatorDelay(0);
 
     // 3. Configurar el DateRangeSelection en la UI
     // Usamos un pequeño delay o esperamos a que la vista esté lista para asegurar que el ID exista
@@ -145,67 +146,53 @@ public onInit(): void {
 }
 private async _loadDashboardData(): Promise<void> {
     const oView = this.getView();
-    // Obtenemos el control del rango de fechas
     const oRange = this.byId("rangeSelection") as any; 
     
     if (!oView || !this.oDataModel || !oRange) return;
 
+    // 1. Bloqueo total de la pantalla (UI) e indicador de carga
+    oView.setBusy(true); 
+
     const oPlanModel = oView.getModel("plan") as JSONModel;
     oPlanModel.setProperty("/isBusy", true);
 
-    // 1. Obtener fechas directamente del control UI
+    // Obtener fechas del control UI
     let oStartDate = oRange.getDateValue();
     let oEndDate = oRange.getSecondDateValue();
 
-    // Validar que tengamos un rango completo; si no, usamos el mes actual por defecto
     if (!oStartDate || !oEndDate) {
         oStartDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         oEndDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
     } else {
-        // Normalizar para asegurar que cubra todo el día
         oStartDate.setHours(0, 0, 0, 0);
         oEndDate.setHours(23, 59, 59, 999);
     }
 
-    // 2. Sincronizar el inicio del proyecto en el modelo para el renderizado del Gantt
     oPlanModel.setProperty("/startDateProject", oStartDate);
 
-    console.log(`Buscando órdenes desde ${oStartDate.toDateString()} hasta ${oEndDate.toDateString()}...`);
-
     try {
-        // 3. Definir filtros para SAP (BT requiere inicio y fin)
         const aFilters = [
             new Filter("StartDate", FilterOperator.BT, oStartDate),
             new Filter("FinishDate", FilterOperator.BT, oEndDate)
         ];
 
-        // Llamada al módulo ERP
+        // 2. Llamada al ERP
         const oResponse = await ERP.getDataERP("/WorkOrderHeaderSet", this.oDataModel, aFilters);
         
         if (oResponse?.data?.results) {
-            console.log("Datos de SAP recibidos:", oResponse.data.results.length);
-            console.log("Datos de SAP recibidos:", oResponse.data.results);
-
             const aMappedOrders: MaintenanceOrder[] = oResponse.data.results.map((sapItem: any) => {
-
                 const dStartRaw = new Date(sapItem.StartDate);
                 const dEndRaw = new Date(sapItem.FinishDate);
                 const dStart = new Date(dStartRaw.getTime() + dStartRaw.getTimezoneOffset() * 60000);
                 const dEnd = new Date(dEndRaw.getTime() + dEndRaw.getTimezoneOffset() * 60000);
-                // Limpieza de fechas para evitar desfases de horas en las barras
+                
                 dStart.setHours(0, 0, 0, 0);
                 dEnd.setHours(0, 0, 0, 0);
-                
-                // Si duran 0 días (mismo día), la lógica de renderizado ya lo maneja como 1 día
                 
                 const sNombre = sapItem.NombreMec || "Sin Asignar";
                 const sIdMecanico = sapItem.IdMecanico || "";
                 const sTechnicianFull = sIdMecanico ? `${sNombre} (${sIdMecanico})` : sNombre;
-                const sRawId = sapItem.Orderid || sapItem.Aufnr || "";
-    
-                // 2. Quitamos ceros a la izquierda usando una expresión regular
-                // ^0+ busca todos los ceros al inicio. replace los quita.
-                const sCleanId = sRawId.replace(/^0+/, "");
+                const sCleanId = (sapItem.Orderid || sapItem.Aufnr || "").replace(/^0+/, "");
 
                 return {
                     id: sCleanId,
@@ -220,18 +207,17 @@ private async _loadDashboardData(): Promise<void> {
             });
 
             oPlanModel.setProperty("/orders", aMappedOrders);
-            
-            // 4. Redibujar el Gantt con los nuevos datos y fechas
             this._renderCustomGantt();
         }
     } catch (oError) {
         console.error("Error en la petición:", oError);
         MessageBox.error("No se pudo conectar con el servicio de órdenes.");
     } finally {
+        // 3. Desbloqueo de la pantalla
         oPlanModel.setProperty("/isBusy", false);
+        oView.setBusy(false);
     }
 }
-
 
 private _mapStatus(sStatus: string): string {
     if (!sStatus) return "status-default";
@@ -626,7 +612,11 @@ private _formatDateSAP(oDate: Date): string {
 public async onSaveSAP(): Promise<void> {
     if (this._aPendingChanges.length === 0) return;
 
-    const oPlanModel = this.getView()!.getModel("plan") as JSONModel;
+    // 1. Bloqueo total de la pantalla (UI)
+    const oView = this.getView()!;
+    oView.setBusy(true); 
+
+    const oPlanModel = oView.getModel("plan") as JSONModel;
     oPlanModel.setProperty("/isBusy", true);
 
     const oPayload = {
@@ -649,35 +639,37 @@ public async onSaveSAP(): Promise<void> {
         "ReturnSet": []
     };
 
-   try {
-    // 1. Guardamos la lista de IDs modificados antes de limpiar el arreglo
-    const aModifiedIds = this._aPendingChanges.map(o => o.Orderid.replace(/^0+/, ""));
-    const sOrdersList = aModifiedIds.join(", ");
+    try {
+        // 2. Guardamos la lista de IDs modificados antes de limpiar el arreglo
+        const aModifiedIds = this._aPendingChanges.map(o => o.Orderid.replace(/^0+/, ""));
+        const sOrdersList = aModifiedIds.join(", ");
 
-    // 2. LLAMADA POST AL ERP
-    const oResponse: any = await ERP.createDataERP("/WorkOrderHeaderSet", this.oRescheduleModel, oPayload);
+        // 3. LLAMADA POST AL ERP
+        const oResponse: any = await ERP.createDataERP("/WorkOrderHeaderSet", this.oRescheduleModel, oPayload);
 
-    // 3. MOSTRAR RESULTADOS
-    if (oResponse && oResponse.ReturnSet && oResponse.ReturnSet.results && oResponse.ReturnSet.results.length > 0) {
-        // Si SAP devolvió mensajes detallados (ERRORES/WARNINGS), usamos el diálogo profesional
-        this._showSapReturnMessages(oResponse.ReturnSet.results);
-    } else {
-        // Si no hay mensajes de error, mostramos un resumen de lo que se guardó
-        MessageBox.success(`Se actualizaron correctamente las siguientes órdenes: \n\n ${sOrdersList}`, {
-            title: "Cambios Guardados"
-        });
-    }
+        // 4. MOSTRAR RESULTADOS
+        if (oResponse && oResponse.ReturnSet && oResponse.ReturnSet.results && oResponse.ReturnSet.results.length > 0) {
+            // Si SAP devolvió mensajes detallados, usamos el diálogo profesional
+            this._showSapReturnMessages(oResponse.ReturnSet.results);
+        } else {
+            // Si no hay mensajes de error, mostramos un resumen de éxito
+            MessageBox.success(`Se actualizaron correctamente las siguientes órdenes: \n\n ${sOrdersList}`, {
+                title: "Cambios Guardados"
+            });
+        }
 
-    // 4. LIMPIEZA Y REFRESCO
-    this._aPendingChanges = [];
-    this._resetUI();
-    this._loadDashboardData();
+        // 5. LIMPIEZA Y REFRESCO
+        this._aPendingChanges = [];
+        this._resetUI();
+        await this._loadDashboardData();
 
-} catch (oError: any) {
+    } catch (oError: any) {
         console.error("Error SAP:", oError);
         MessageBox.error("No se pudieron guardar los cambios. Revise la consola.");
     } finally {
+        // 6. DESBLOQUEO DE PANTALLA
         oPlanModel.setProperty("/isBusy", false);
+        oView.setBusy(false);
     }
 }
 

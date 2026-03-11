@@ -5,7 +5,7 @@
     {
       "source": "^<apply-service-segment-path>/(.*)$",
       "target": "<apply-service-segment-path>/$1",
-      "destination": "onPremECC_QAS",
+      "destination": "onPremECC_PRO",
       "authenticationType": "xsuaa",
       "csrfProtection": false
     },
