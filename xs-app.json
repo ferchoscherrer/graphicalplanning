@@ -3,10 +3,10 @@
   "authenticationMethod": "route",
   "routes": [
     {
-      "source": "^<apply-service-segment-path>/(.*)$",
-      "target": "<apply-service-segment-path>/$1",
-      "destination": "onPremECC_PRO",
-      "authenticationType": "xsuaa",
+      "source": "^/sap/(.*)$",
+      "target": "/sap/$1",
+      "destination": "onPremECC_QAS",
+      "authenticationType": "none",
       "csrfProtection": false
     },
     {

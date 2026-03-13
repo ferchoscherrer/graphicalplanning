@@ -88,10 +88,7 @@
         "preload": true,
         "settings": {
           "useBatch": true,
-          "defaultBindingMode": "TwoWay",
-          "metadataUrlParams": {
-                    "sap-language": "ES"
-                }
+          "defaultBindingMode": "TwoWay"
         }
       },
       "reschedule": {
@@ -99,10 +96,7 @@
         "dataSource": "rescheduleService",
         "settings": {
           "useBatch": true,
-          "defaultBindingMode": "TwoWay",
-          "metadataUrlParams": {
-                    "sap-language": "ES"
-                }
+          "defaultBindingMode": "TwoWay"
         }
       }
     },

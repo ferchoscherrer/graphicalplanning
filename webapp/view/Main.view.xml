@@ -4,7 +4,7 @@
     <Page id="page" title="BTP Custom Maintenance Planner">
         <content>
             <VBox class="sapUiSmallMargin">
-                <Title text="Cronograma de Órdenes (TypeScript Native)" level="H2" class="sapUiMediumMarginBottom" />
+                <Title text="Cronograma de Órdenes" level="H2" class="sapUiMediumMarginBottom" />
                 
                 <OverflowToolbar class="sapUiTinyMarginBottom">
     <Label text="Periodo de Planificación:" />
@@ -28,24 +28,24 @@
                 <HBox class="gantt-legend sapUiSmallMarginBottom" wrap="Wrap" justifyContent="Start" alignItems="Center">
                     <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
                         <core:HTML content='&lt;div class="legend-box status-u100"&gt;&lt;/div&gt;' />
-                        <Text text="Pendiente (100)" class="sapUiTinyMarginBegin" />
+                        <Text text="Pendiente" class="sapUiTinyMarginBegin" />
                     </HBox>
                     <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
                         <core:HTML content='&lt;div class="legend-box status-u200"&gt;&lt;/div&gt;' />
-                        <Text text="En Proceso (200)" class="sapUiTinyMarginBegin" />
+                        <Text text="En Proceso" class="sapUiTinyMarginBegin" />
                     </HBox>
                     <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
                         <core:HTML content='&lt;div class="legend-box status-u300"&gt;&lt;/div&gt;' />
-                        <Text text="Finalizada (300)" class="sapUiTinyMarginBegin" />
+                        <Text text="Finalizada" class="sapUiTinyMarginBegin" />
                     </HBox>
                     <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
                         <core:HTML content='&lt;div class="legend-box status-u400"&gt;&lt;/div&gt;' />
-                        <Text text="Pte. Firma (400)" class="sapUiTinyMarginBegin" />
+                        <Text text="Pte. Firma" class="sapUiTinyMarginBegin" />
                     </HBox>
                     
                     <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
                         <core:HTML content='&lt;div class="legend-box status-abie" style="display:flex; justify-content:center; align-items:center; font-size:10px;"&gt;⚠️&lt;/div&gt;' />
-                        <Text text="Abierta (ABIE)" class="sapUiTinyMarginBegin" />
+                        <Text text="Abierta" class="sapUiTinyMarginBegin" />
                     </HBox>
                     <HBox alignItems="Center" class="legend-item">
                         <core:HTML content='&lt;div class="legend-box status-default"&gt;&lt;/div&gt;' />
@@ -57,7 +57,7 @@
 </HBox>
                 </HBox>
 
-                <ScrollContainer busy="{plan>/isBusy}" width="100%" height="600px" horizontal="true" vertical="true">
+                <ScrollContainer busy="{plan>/isBusy}" width="100%" height="900px" horizontal="true" vertical="true">
                     <core:HTML id="myGanttHtml" preferDOM="true"
                         content='&lt;div id="gantt-container-scroll" style="width: 3720px;"&gt;
                                     &lt;div id="ganttHeader" class="gantt-header"&gt;&lt;/div&gt;

@@ -99,7 +99,7 @@ public onInit(): void {
     const oFirstDay = new Date(oNow.getFullYear(), oNow.getMonth(), 1);
     const oLastDay = new Date(oNow.getFullYear(), oNow.getMonth() + 1, 0);
 
-    // 2. Inicializar el modelo local "plan" con fechas iniciales
+    // 2. Inicializar el modelo local "plan" con fechas iniciales y retardo de Busy a 0
     const oViewModel = new JSONModel({
         startDateProject: oFirstDay,
         orders: [],
@@ -108,8 +108,7 @@ public onInit(): void {
     this.getView()!.setModel(oViewModel, "plan");
     this.getView()!.setBusyIndicatorDelay(0);
 
-    // 3. Configurar el DateRangeSelection en la UI
-    // Usamos un pequeño delay o esperamos a que la vista esté lista para asegurar que el ID exista
+    // 3. Configurar el DateRangeSelection en la UI (onAfterShow)
     this.getView()!.addEventDelegate({
         onAfterShow: () => {
             const oRangeSelection = this.byId("rangeSelection") as any;
@@ -120,28 +119,58 @@ public onInit(): void {
         }
     });
 
-    // 4. Obtener el modelo OData del Componente
+    // 4. Obtener el Componente y registrar modelos/eventos
     const oComponent = this.getOwnerComponent();
     if (oComponent) {
+        // Modelos OData
         this.oDataModel = oComponent.getModel();
         this.oRescheduleModel = oComponent.getModel("reschedule");
+
+        // EVENTO: Bloqueo de navegación (Botón atrás)
+        window.addEventListener("popstate", this._handleBrowserBack.bind(this));
     }
 
     // 5. Carga inicial de datos
     if (this.oDataModel) {
         this._loadDashboardData();
     } else {
-        // Salvavidas: Si el modelo no está listo (carga asíncrona del manifest)
+        // Salvavidas: Si el modelo no está listo aún (carga asíncrona)
         const oView = this.getView()!;
         const fnChange = () => {
             const oModel = this.getOwnerComponent()?.getModel();
             if (oModel) {
                 this.oDataModel = oModel;
                 this._loadDashboardData();
-                oView.detachModelContextChange(fnChange); // Limpiar evento una vez obtenido
+                oView.detachModelContextChange(fnChange);
             }
         };
         oView.attachModelContextChange(fnChange);
+    }
+}
+
+public onExit(): void {
+    // Limpiar el evento al destruir la vista para no afectar otras apps en el Workzone
+    window.removeEventListener("popstate", this._handleBrowserBack);
+}
+
+private _handleBrowserBack(oEvent: any): void {
+    if (this._aPendingChanges && this._aPendingChanges.length > 0) {
+        // Bloqueamos la navegación temporalmente empujando el estado actual de nuevo al historial
+        window.history.pushState(null, "", window.location.href);
+
+        MessageBox.confirm("Tienes cambios sin guardar en el Gantt. ¿Estás seguro de que deseas salir y perder los cambios?", {
+            title: "Cambios pendientes",
+            actions: [MessageBox.Action.YES, MessageBox.Action.NO],
+            // Cambio aquí: oAction puede ser string o null
+            onClose: (oAction: string | null) => {
+                if (oAction === MessageBox.Action.YES) {
+                    // Limpiamos los cambios y removemos el listener para permitir la salida
+                    this._aPendingChanges = [];
+                    window.removeEventListener("popstate", this._handleBrowserBack.bind(this));
+                    window.history.back();
+                }
+            }
+        });
     }
 }
 private async _loadDashboardData(): Promise<void> {
@@ -150,7 +179,7 @@ private async _loadDashboardData(): Promise<void> {
     
     if (!oView || !this.oDataModel || !oRange) return;
 
-    // 1. Bloqueo total de la pantalla (UI) e indicador de carga
+    // 1. Bloqueo total de la pantalla (UI) e indicador de carga inmediato
     oView.setBusy(true); 
 
     const oPlanModel = oView.getModel("plan") as JSONModel;
@@ -160,6 +189,7 @@ private async _loadDashboardData(): Promise<void> {
     let oStartDate = oRange.getDateValue();
     let oEndDate = oRange.getSecondDateValue();
 
+    // Normalización de fechas para asegurar el rango correcto
     if (!oStartDate || !oEndDate) {
         oStartDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         oEndDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
@@ -168,19 +198,31 @@ private async _loadDashboardData(): Promise<void> {
         oEndDate.setHours(23, 59, 59, 999);
     }
 
+    // Sincronizar el inicio del proyecto para el renderizado del Gantt
     oPlanModel.setProperty("/startDateProject", oStartDate);
 
     try {
+        // Filtros para la llamada OData
         const aFilters = [
             new Filter("StartDate", FilterOperator.BT, oStartDate),
             new Filter("FinishDate", FilterOperator.BT, oEndDate)
         ];
 
-        // 2. Llamada al ERP
+        // 2. Llamada al módulo ERP
         const oResponse = await ERP.getDataERP("/WorkOrderHeaderSet", this.oDataModel, aFilters);
         
         if (oResponse?.data?.results) {
-            const aMappedOrders: MaintenanceOrder[] = oResponse.data.results.map((sapItem: any) => {
+            // --- FILTRADO POR TIPO DE ORDEN SM02 ---
+            const aRawResults = oResponse.data.results;
+            console.log (aRawResults)
+            const aFilteredResults = aRawResults.filter((item: any) => {
+                // Verificamos el tipo de orden (AUART o OrderType según el servicio)
+                const sType = item.OrderType || item.Auart || "";
+                return sType.toUpperCase() === "SM02";
+            });
+
+            // 3. Mapeo de los resultados filtrados al formato del Gantt
+            const aMappedOrders: MaintenanceOrder[] = aFilteredResults.map((sapItem: any) => {
                 const dStartRaw = new Date(sapItem.StartDate);
                 const dEndRaw = new Date(sapItem.FinishDate);
                 const dStart = new Date(dStartRaw.getTime() + dStartRaw.getTimezoneOffset() * 60000);
@@ -206,14 +248,15 @@ private async _loadDashboardData(): Promise<void> {
                 };
             });
 
+            // Actualizar modelo y redibujar
             oPlanModel.setProperty("/orders", aMappedOrders);
             this._renderCustomGantt();
         }
     } catch (oError) {
-        console.error("Error en la petición:", oError);
-        MessageBox.error("No se pudo conectar con el servicio de órdenes.");
+        console.error("Error en la carga de datos:", oError);
+        MessageBox.error("No se pudo conectar con el servicio de órdenes SAP.");
     } finally {
-        // 3. Desbloqueo de la pantalla
+        // 4. Desbloqueo de la pantalla (Ocurre siempre)
         oPlanModel.setProperty("/isBusy", false);
         oView.setBusy(false);
     }
@@ -292,16 +335,36 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
         return acc;
     }, {});
 
+    // --- LÓGICA DE ORDENAMIENTO: Mandar "Sin Asignar" al final ---
+    const aSortedTechNames = Object.keys(mGroups).sort((a, b) => {
+        const sNameA = a.toLowerCase();
+        const sNameB = b.toLowerCase();
+
+        if (sNameA.includes("sin asignar")) return 1;
+        if (sNameB.includes("sin asignar")) return -1;
+
+        return sNameA.localeCompare(sNameB);
+    });
+
     // 4. Dibujar Grupos y Barras
-    Object.keys(mGroups).forEach(techName => {
+    aSortedTechNames.forEach(techName => {
         const isCollapsed = this._mCollapsedGroups[techName] || false;
+        const bIsUnassigned = techName.toLowerCase().includes("sin asignar");
 
         // Fila de encabezado de Mecánico
         const oTechHeader = document.createElement("div");
         oTechHeader.className = `gantt-tech-header ${isCollapsed ? 'collapsed' : ''}`;
+        
+        // --- COLOR DIFERENTE PARA SIN ASIGNAR ---
+        if (bIsUnassigned) {
+            oTechHeader.style.backgroundColor = "#ff9500ff"; // Gris azulado oscuro
+            oTechHeader.style.borderLeft = "5px solid #ff9800"; // Borde naranja de advertencia
+            oTechHeader.style.color = "white";
+        }
+
         oTechHeader.innerHTML = `
-            <span class="collapse-icon">▼</span>
-            <span>👤 Mecánico: ${techName} (${mGroups[techName].length} órdenes)</span>
+            <span class="collapse-icon">${isCollapsed ? '▶' : '▼'}</span>
+            <span>👤 ${bIsUnassigned ? 'PENDIENTES: ' : 'Mecánico: '} ${techName} (${mGroups[techName].length} órdenes)</span>
         `;
 
         oTechHeader.onclick = () => {
@@ -313,80 +376,71 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
 
         // Dibujar las órdenes de este mecánico
         mGroups[techName].forEach((oOrder: MaintenanceOrder) => {
-    const oRow = document.createElement("div");
-    oRow.className = "gantt-row-custom";
-    
-    if (isCollapsed) {
-        oRow.classList.add("row-collapsed");
-    }
+            const oRow = document.createElement("div");
+            oRow.className = "gantt-row-custom";
+            
+            if (isCollapsed) {
+                oRow.classList.add("row-collapsed");
+            }
 
-    oRow.ondragover = (e) => e.preventDefault();
-    oRow.ondrop = (e) => this._onDropOrder(e, techName);
+            oRow.ondragover = (e) => e.preventDefault();
+            oRow.ondrop = (e) => this._onDropOrder(e, techName);
 
-    const iOffsetDays = this._getDaysDiff(dStartProject, oOrder.start);
-    let iDurationDays = this._getDaysDiff(oOrder.start, oOrder.end);
-    if (iDurationDays <= 0) iDurationDays = 1;
+            const iOffsetDays = this._getDaysDiff(dStartProject, oOrder.start);
+            let iDurationDays = this._getDaysDiff(oOrder.start, oOrder.end);
+            if (iDurationDays <= 0) iDurationDays = 1;
 
-    const bHasPendingChanges = this._aPendingChanges && 
-                               this._aPendingChanges.some(c => c.Orderid === oOrder.id.padStart(12, '0'));
-    const oBar = document.createElement("div");
-    
-    // LÓGICA DE BLOQUEO: Si el estatus empieza con "status-u" (Estatus de usuario 100, 200, etc.)
-    const bIsLocked = oOrder.status.startsWith("status-u");
-    oBar.className = `gantt-bar-custom ${oOrder.status} ${bIsLocked ? "order-locked" : ""} ${bHasPendingChanges ? "order-changed" : ""}`;
-  //  oBar.className = `gantt-bar-custom ${oOrder.status} ${bIsLocked ? "order-locked" : ""}`;
-    
-    // Solo es arrastrable si NO está bloqueado
-    oBar.draggable = !bIsLocked;
-    
-    // Solo adjuntamos eventos de Drag si no está bloqueado
-    if (!bIsLocked) {
-        this._attachDragEvents(oBar, oOrder, dStartProject, iDayWidth);
-    } else {
-        oBar.title = "Esta orden tiene un estatus de usuario y no se puede mover.";
-        oBar.style.cursor = "not-allowed";
-    }
+            const bHasPendingChanges = this._aPendingChanges && 
+                                       this._aPendingChanges.some(c => c.Orderid === oOrder.id.padStart(12, '0'));
+            const oBar = document.createElement("div");
+            
+            const bIsLocked = oOrder.status.startsWith("status-u");
+            oBar.className = `gantt-bar-custom ${oOrder.status} ${bIsLocked ? "order-locked" : ""} ${bHasPendingChanges ? "order-changed" : ""}`;
+            
+            oBar.draggable = !bIsLocked;
+            
+            if (!bIsLocked) {
+                this._attachDragEvents(oBar, oOrder, dStartProject, iDayWidth);
+            } else {
+                oBar.title = "Esta orden tiene un estatus de usuario y no se puede mover.";
+                oBar.style.cursor = "not-allowed";
+            }
 
-    oBar.style.left = `${iOffsetDays * iDayWidth}px`;
-    oBar.style.width = `${(iDurationDays * iDayWidth) - 2}px`;
-    
-    const sWarningIcon = oOrder.status === "status-abie" ? "⚠️ " : "";
-    const sLockIcon = bIsLocked ? "🔒 " : "";
+            oBar.style.left = `${iOffsetDays * iDayWidth}px`;
+            oBar.style.width = `${(iDurationDays * iDayWidth) - 2}px`;
+            
+            const sWarningIcon = oOrder.status === "status-abie" ? "⚠️ " : "";
+            const sLockIcon = bIsLocked ? "🔒 " : "";
 
-    oBar.innerHTML = `
-        <div class="bar-id" style="pointer-events:none; font-size: 0.7rem; font-weight: bold; opacity: 0.9;">
-             ${sLockIcon}${sWarningIcon}Orden: ${oOrder.id}
-         </div>
-        <div class="bar-equipment" style="pointer-events:none; font-size: 0.65rem;">EQ: ${(oOrder as any).equipment || "N/A"}</div>
-        <div class="bar-customer" style="pointer-events:none; font-size: 0.65rem;">${(oOrder as any).customerName || "N/A"}</div>
-    `;
+            oBar.innerHTML = `
+                <div class="bar-id" style="pointer-events:none; font-size: 0.7rem; font-weight: bold; opacity: 0.9;">
+                     ${sLockIcon}${sWarningIcon}Orden: ${oOrder.id}
+                 </div>
+                <div class="bar-equipment" style="pointer-events:none; font-size: 0.65rem;">EQ: ${(oOrder as any).equipment || "N/A"}</div>
+                <div class="bar-customer" style="pointer-events:none; font-size: 0.65rem;">${(oOrder as any).customerName || "N/A"}</div>
+            `;
 
-    oRow.appendChild(oBar);
-    oContainer.appendChild(oRow);
-});
+            oRow.appendChild(oBar);
+            oContainer.appendChild(oRow);
+        });
     });
 
+    // Línea de "Hoy" y buscador
     const oNow = new Date();
-    // Solo dibujamos la línea si "Hoy" está dentro del mes visible
     if (oNow.getMonth() === dStartProject.getMonth() && oNow.getFullYear() === dStartProject.getFullYear()) {
         const iTodayOffset = this._getDaysDiff(dStartProject, oNow);
-        
-        // Calculamos la posición exacta incluyendo horas y minutos para que la línea se mueva durante el día
         const iExactOffset = iTodayOffset + (oNow.getHours() / 24) + (oNow.getMinutes() / 1440);
         
         const oTodayLine = document.createElement("div");
         oTodayLine.className = "gantt-today-line";
         oTodayLine.style.left = `${iExactOffset * iDayWidth}px`;
-        
-        // Añadimos una etiqueta que diga "Hoy"
         oTodayLine.innerHTML = `<span class="today-label">Hoy</span>`;
-        
         oContainer.appendChild(oTodayLine);
+        
         const oSearchField = this.byId("searchOrders") as any;
-if (oSearchField && oSearchField.getValue()) {
-    // Disparamos manualmente el filtro para aplicar sobre el nuevo DOM
-    this.onSearchGantt({ getParameter: () => oSearchField.getValue() });
-}
+        if (oSearchField && oSearchField.getValue()) {
+            this.onSearchGantt({ getParameter: () => oSearchField.getValue() });
+        }
     }
 }
     // ESTA ES LA FUNCIÓN QUE FALTABA
@@ -450,6 +504,10 @@ if (oSearchField && oSearchField.getValue()) {
             return;
         }
 
+        // --- 2. DETECTAR SI CAMBIÓ EL MECÁNICO ---
+        const sOriginalTechnician = oOrder.technician;
+        const bIsNewTech = sOriginalTechnician !== newTechnician;
+
         const cursorOffsetX = parseInt(e.dataTransfer?.getData("cursorOffsetX") || "0");
         const oContainer = document.getElementById("realGanttId");
         if (!oContainer) return;
@@ -457,49 +515,46 @@ if (oSearchField && oSearchField.getValue()) {
         const rect = oContainer.getBoundingClientRect();
         const iDayWidth = 120;
         
-        // 2. CÁLCULOS DE POSICIÓN X RELATIVA
+        // 3. CÁLCULOS DE POSICIÓN X RELATIVA
         const x = e.clientX - rect.left - cursorOffsetX;
         const newDayOffset = Math.floor((x + (iDayWidth / 2)) / iDayWidth);
         const dStartProject = oModel.getProperty("/startDateProject");
         
-        // 3. CÁLCULO DE DURACIÓN ORIGINAL
+        // 4. CÁLCULO DE DURACIÓN ORIGINAL
         let durationDays = this._getDaysDiff(oOrder.start, oOrder.end);
         if (durationDays <= 0) durationDays = 1;
 
-        // 4. ASIGNACIÓN DE NUEVAS FECHAS (Ajuste Anti-Desfase)
-        // Usamos getTime() para clonar la fecha base y evitar mutaciones
+        // 5. ASIGNACIÓN DE NUEVAS FECHAS (Ajuste Anti-Desfase)
         const newStart = new Date(dStartProject.getTime());
         newStart.setDate(dStartProject.getDate() + newDayOffset);
         
-        /** * FIX CRÍTICO: Seteamos a las 12:00 PM. 
-         * Si tu zona horaria (México) resta 6 horas al enviar a SAP, 
-         * la fecha llegará como las 06:00 AM del MISMO DÍA en lugar de las 18:00 del día anterior.
-         */
+        /** * FIX CRÍTICO: Seteamos a las 12:00 PM para evitar desfases de zona horaria al enviar a SAP */
         newStart.setHours(12, 0, 0, 0);
         
         const newEnd = new Date(newStart.getTime());
         newEnd.setDate(newStart.getDate() + durationDays);
         newEnd.setHours(12, 0, 0, 0);
 
-        // 5. ACTUALIZACIÓN DEL MODELO LOCAL
+        // 6. ACTUALIZACIÓN DEL MODELO LOCAL
         oOrder.start = newStart;
         oOrder.end = newEnd;
         oOrder.technician = newTechnician;
         oModel.setProperty("/orders", aOrders);
 
-        // --- 6. REGISTRO DE CAMBIOS PARA SAP (JSON PREVIEW) ---
+        // --- 7. REGISTRO DE CAMBIOS PARA SAP ---
         const oChange = {
             Orderid: oOrder.id.padStart(12, '0'),
             StartDate: newStart, 
             FinishDate: newEnd,
-            IdMecanico: oOrder.technician 
+            IdMecanico: oOrder.technician,
+            hasTechChange: bIsNewTech // Esta bandera se usará en onSaveSAP
         };
 
         if (!this._aPendingChanges) { this._aPendingChanges = []; }
         this._aPendingChanges = this._aPendingChanges.filter(c => c.Orderid !== oChange.Orderid);
         this._aPendingChanges.push(oChange);
 
-        // Actualización visual del botón de guardar
+        // Actualización visual de botones
         const oBtnSave = this.byId("btnSave") as Button;
         const oBtnReset = this.byId("btnReset") as Button;
         if (oBtnSave) {
@@ -507,14 +562,14 @@ if (oSearchField && oSearchField.getValue()) {
             oBtnSave.setText(`Guardar Cambios (${this._aPendingChanges.length})`);
         }
         if (oBtnReset) {
-    oBtnReset.setEnabled(true);
-}
+            oBtnReset.setEnabled(true);
+        }
 
-        // 7. REFRESCAR GANTT
+        // 8. REFRESCAR GANTT
         this._renderCustomGantt();
         
-        MessageToast.show(`Orden ${oOrder.id} preparada para el día ${newStart.getDate()}`);
-        console.log("Cambio registrado (Safe Date):", oChange);
+        MessageToast.show(`Orden ${oOrder.id} movida correctamente`);
+        console.log("Cambio registrado:", oChange);
     }
 }
 public onResetChanges(): void {
@@ -620,14 +675,20 @@ public async onSaveSAP(): Promise<void> {
     oPlanModel.setProperty("/isBusy", true);
 
     const oPayload = {
-        "WorkOrderHeader": { "Supervisor": "miguel.hernandez@tellus-technologies.com" },
+        "WorkOrderHeader": { "Supervisor": "info@tellus-technologies.com" },
         "WorkOrderItemsSet": this._aPendingChanges.map(change => {
             let sMecId = "";
-            const sOriginalMec = change.IdMecanico || "";
-            if (sOriginalMec !== "" && sOriginalMec !== "Sin Asignar") {
-                const oMatch = sOriginalMec.match(/\(([^)]+)\)/);
-                sMecId = oMatch ? oMatch[1] : sOriginalMec;
+            
+            // Solo procesamos el ID del mecánico si hubo un cambio de carril (técnico)
+            if (change.hasTechChange) {
+                const sOriginalMec = change.IdMecanico || "";
+                if (sOriginalMec !== "" && sOriginalMec !== "Sin Asignar") {
+                    const oMatch = sOriginalMec.match(/\(([^)]+)\)/);
+                    sMecId = oMatch ? oMatch[1] : sOriginalMec;
+                }
             }
+            // Si hasTechChange es falso, sMecId permanece como ""
+
             return {
                 "OrderId": change.Orderid,
                 "OrderItem": "",
