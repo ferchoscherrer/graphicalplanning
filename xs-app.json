@@ -5,10 +5,10 @@
     {
       "source": "^/sap/(.*)$",
       "target": "/sap/$1",
-      "destination": "onPremECC_QAS",
+      "destination": "onPremECC_PRO",
       "authenticationType": "none",
       "csrfProtection": false
-    },
+    },git add .
     {
       "source": "^/resources/(.*)$",
       "target": "/resources/$1",

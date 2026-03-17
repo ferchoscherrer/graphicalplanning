@@ -13,8 +13,6 @@ import MessageView from "sap/m/MessageView";
 import MessageItem from "sap/m/MessageItem";
 import Dialog from "sap/m/Dialog";
 
-
-
 /**
  * @namespace graphicalplanning.controller
  */
@@ -24,6 +22,10 @@ export default class Main extends Controller {
     private _aPendingChanges: any[] = [];
     private ZCS_RESCHEDULE_WORKORDER_SRV: ODataModel;
     private oRescheduleModel: any;
+
+    // *** NUEVO: Referencia para controlar el evento de navegación correctamente ***
+    private _fnNavigationHandler: any;
+
     private _resetUI(): void {
     const oBtnSave = this.byId("btnSave") as Button;
     const oBtnReset = this.byId("btnReset") as Button;
@@ -37,61 +39,6 @@ export default class Main extends Controller {
         oBtnReset.setEnabled(false);
     }
 }
-/*
-    public onInit(): void {
-        const today = new Date();
-        const dStart = new Date(today.getFullYear(), today.getMonth(), 1);
-
-        const oViewModel = new JSONModel({
-            startDateProject: new Date(new Date().getFullYear(), 0, 1),
-            orders: [],
-            isBusy: false
-        });
-        this.getView()!.setModel(oViewModel, "plan");
-        this.oDataModel = this.getOwnerComponent()!.getModel();
-        this._loadDashboardData();
-
-        const oData = {
-    startDateProject: dStart,
-    orders: [
-        { 
-            id: "1001", 
-            desc: "Falla Motor", 
-            start: new Date(today.getFullYear(), today.getMonth(), 2), 
-            end: new Date(today.getFullYear(), today.getMonth(), 3), // +1 día
-            status: "completed", 
-            technician: "Juan Pérez" 
-        },
-        { 
-            id: "1002", 
-            desc: "Lubricación", 
-            start: new Date(today.getFullYear(), today.getMonth(), 4), 
-            end: new Date(today.getFullYear(), today.getMonth(), 5), // +1 día
-            status: "in_progress", 
-            technician: "Juan Pérez" 
-        },
-        { 
-            id: "1003", 
-            desc: "Ajuste Frenos", 
-            start: new Date(today.getFullYear(), today.getMonth(), 6), 
-            end: new Date(today.getFullYear(), today.getMonth(), 7), // +1 día
-            status: "pending", 
-            technician: "Ricardo Sosa" 
-        },
-        { 
-            id: "1004", 
-            desc: "Electrónica", 
-            start: new Date(today.getFullYear(), today.getMonth(), 8), 
-            end: new Date(today.getFullYear(), today.getMonth(), 9), // +1 día
-            status: "pending", 
-            technician: "Ricardo Sosa" 
-        }
-    ]
-};
-this.getView()!.setModel(new JSONModel(oData), "plan");
-    }
-*/
-
 
 public onInit(): void {
     // 1. Calcular fechas por defecto (Mes en curso)
@@ -103,7 +50,9 @@ public onInit(): void {
     const oViewModel = new JSONModel({
         startDateProject: oFirstDay,
         orders: [],
-        isBusy: true
+        isBusy: true,
+        // *** CAMBIO: Inicialización de la estructura de resumen para los contadores ***
+        summary: { u100: 0, u200: 0, u300: 0, u400: 0, abie: 0, others: 0, changed: 0 }
     });
     this.getView()!.setModel(oViewModel, "plan");
     this.getView()!.setBusyIndicatorDelay(0);
@@ -116,6 +65,8 @@ public onInit(): void {
                 oRangeSelection.setDateValue(oFirstDay);
                 oRangeSelection.setSecondDateValue(oLastDay);
             }
+            console.log("GanttLog: Registrando estado de protección en historial");
+            window.history.pushState({ protected: true }, "", window.location.href);
         }
     });
 
@@ -125,9 +76,13 @@ public onInit(): void {
         // Modelos OData
         this.oDataModel = oComponent.getModel();
         this.oRescheduleModel = oComponent.getModel("reschedule");
+        console.log("GanttLog: Registrando listeners de salida");
 
-        // EVENTO: Bloqueo de navegación (Botón atrás)
-        window.addEventListener("popstate", this._handleBrowserBack.bind(this));
+        // *** CAMBIO: Registro de eventos de salida con referencia persistente ***
+        this._fnNavigationHandler = this._handleBrowserBack.bind(this);
+        window.addEventListener("popstate", this._fnNavigationHandler);
+        
+        window.addEventListener("beforeunload", this._handleBeforeUnload.bind(this));
     }
 
     // 5. Carga inicial de datos
@@ -149,33 +104,74 @@ public onInit(): void {
 }
 
 public onExit(): void {
-    // Limpiar el evento al destruir la vista para no afectar otras apps en el Workzone
-    window.removeEventListener("popstate", this._handleBrowserBack);
+    console.log("GanttLog: Limpiando listeners en onExit");
+    window.removeEventListener("popstate", this._fnNavigationHandler);
+    window.removeEventListener("beforeunload", this._handleBeforeUnload.bind(this));
+}
+
+// *** NUEVO MÉTODO: Bloqueo de cierre de pestaña o recarga (F5) ***
+private _handleBeforeUnload(oEvent: BeforeUnloadEvent): void {
+    if (this._aPendingChanges && this._aPendingChanges.length > 0) {
+        oEvent.preventDefault();
+        oEvent.returnValue = ''; 
+    }
 }
 
 private _handleBrowserBack(oEvent: any): void {
     if (this._aPendingChanges && this._aPendingChanges.length > 0) {
-        // Bloqueamos la navegación temporalmente empujando el estado actual de nuevo al historial
-        window.history.pushState(null, "", window.location.href);
+        console.log("GanttLog: Intento de salida con cambios ->", this._aPendingChanges.length);
 
-        MessageBox.confirm("Tienes cambios sin guardar en el Gantt. ¿Estás seguro de que deseas salir y perder los cambios?", {
-            title: "Cambios pendientes",
+        // 1. Inmediatamente volvemos a poner el estado para evitar que el Router de SAPUI5 reaccione
+        window.history.pushState({ protected: true }, "", window.location.href);
+
+        // 2. Mostrar confirmación
+        MessageBox.confirm("Tienes movimientos pendientes en el Gantt. ¿Estás seguro de que deseas salir? Los cambios se perderán.", {
+            title: "Confirmar salida",
             actions: [MessageBox.Action.YES, MessageBox.Action.NO],
-            // Cambio aquí: oAction puede ser string o null
             onClose: (oAction: string | null) => {
                 if (oAction === MessageBox.Action.YES) {
-                    // Limpiamos los cambios y removemos el listener para permitir la salida
+                    console.log("GanttLog: Usuario confirmó salida.");
                     this._aPendingChanges = [];
-                    window.removeEventListener("popstate", this._handleBrowserBack.bind(this));
-                    window.history.back();
+                    // Removemos el listener para que el siguiente back() no sea interceptado
+                    window.removeEventListener("popstate", this._fnNavigationHandler);
+                    window.history.back(); // Ahora sí sale de la app
+                } else {
+                    console.log("GanttLog: Usuario canceló salida. Permaneciendo en Gantt.");
+                    MessageToast.show("Edición mantenida.");
                 }
             }
         });
     }
 }
+
+// *** NUEVO MÉTODO: Lógica de conteo para el dashboard dinámico ***
+private _updateOrderSummary(): void {
+    const oPlanModel = this.getView()!.getModel("plan") as JSONModel;
+    const aOrders = oPlanModel.getProperty("/orders") || [];
+    
+    const oSummary = {
+        u100: 0, u200: 0, u300: 0, u400: 0, abie: 0, others: 0,
+        changed: this._aPendingChanges ? this._aPendingChanges.length : 0
+    };
+
+    aOrders.forEach((oOrder: any) => {
+        switch (oOrder.status) {
+            case "status-u100": oSummary.u100++; break;
+            case "status-u200": oSummary.u200++; break;
+            case "status-u300": oSummary.u300++; break;
+            case "status-u400": oSummary.u400++; break;
+            case "status-abie": oSummary.abie++; break;
+            default: oSummary.others++; break;
+        }
+    });
+
+    oPlanModel.setProperty("/summary", oSummary);
+}
+
 private async _loadDashboardData(): Promise<void> {
     const oView = this.getView();
     const oRange = this.byId("rangeSelection") as any; 
+    
     
     if (!oView || !this.oDataModel || !oRange) return;
 
@@ -250,6 +246,10 @@ private async _loadDashboardData(): Promise<void> {
 
             // Actualizar modelo y redibujar
             oPlanModel.setProperty("/orders", aMappedOrders);
+            
+            // *** CAMBIO: Actualización de contadores tras cargar datos ***
+            this._updateOrderSummary();
+            
             this._renderCustomGantt();
         }
     } catch (oError) {
@@ -319,7 +319,7 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
     }
 
     const oModel = oView.getModel("plan") as JSONModel;
-    const aOrders = oModel.getProperty("/orders") as MaintenanceOrder[] || [];
+    const aOrders = oModel.getProperty("/orders") || [];
     const dStartProject = oModel.getProperty("/startDateProject");
     const iDayWidth = 120;
 
@@ -328,7 +328,7 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
     oContainer.innerHTML = "";
 
     // 3. Agrupación por mecánico
-    const mGroups = aOrders.reduce((acc: any, order) => {
+    const mGroups = aOrders.reduce((acc: any, order: MaintenanceOrder) => {
         const tech = order.technician || "Sin Asignar";
         if (!acc[tech]) acc[tech] = [];
         acc[tech].push(order);
@@ -350,6 +350,18 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
     aSortedTechNames.forEach(techName => {
         const isCollapsed = this._mCollapsedGroups[techName] || false;
         const bIsUnassigned = techName.toLowerCase().includes("sin asignar");
+        
+        // *** NUEVO: Calcular resumen de estados para este mecánico específico ***
+        const aOrdersByTech = mGroups[techName];
+        const oT = { u100: 0, u200: 0, u300: 0, u400: 0, abie: 0 };
+        
+        aOrdersByTech.forEach((o: any) => {
+            if (o.status === "status-u100") oT.u100++;
+            else if (o.status === "status-u200") oT.u200++;
+            else if (o.status === "status-u300") oT.u300++;
+            else if (o.status === "status-u400") oT.u400++;
+            else if (o.status === "status-abie") oT.abie++;
+        });
 
         // Fila de encabezado de Mecánico
         const oTechHeader = document.createElement("div");
@@ -362,9 +374,21 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
             oTechHeader.style.color = "white";
         }
 
+        // *** CAMBIO: Estructura interna con mini-dashboard de estados delante de las órdenes ***
         oTechHeader.innerHTML = `
-            <span class="collapse-icon">${isCollapsed ? '▶' : '▼'}</span>
-            <span>👤 ${bIsUnassigned ? 'PENDIENTES: ' : 'Mecánico: '} ${techName} (${mGroups[techName].length} órdenes)</span>
+            <div style="position: sticky; left: 20px; width: fit-content; display: flex; align-items: center; gap: 15px;">
+                <span class="collapse-icon">${isCollapsed ? '▶' : '▼'}</span>
+                <span style="font-weight: bold; min-width: 200px;">👤 ${bIsUnassigned ? 'PENDIENTES: ' : 'Mecánico: '} ${techName}</span>
+                
+                <div style="display: flex; gap: 6px; align-items: center; margin-left: 10px;">
+                    ${oT.u100 > 0 ? `<div class="legend-box status-u100" style="min-width:22px; height:22px; font-size:10px; margin:0;" title="Pendiente">${oT.u100}</div>` : ''}
+                    ${oT.u200 > 0 ? `<div class="legend-box status-u200" style="min-width:22px; height:22px; font-size:10px; margin:0;" title="En Proceso">${oT.u200}</div>` : ''}
+                    ${oT.u300 > 0 ? `<div class="legend-box status-u300" style="min-width:22px; height:22px; font-size:10px; margin:0;" title="Finalizada">${oT.u300}</div>` : ''}
+                    ${oT.u400 > 0 ? `<div class="legend-box status-u400" style="min-width:22px; height:22px; font-size:10px; margin:0;" title="Pte. Firma">${oT.u400}</div>` : ''}
+                    ${oT.abie > 0 ? `<div class="legend-box status-abie" style="min-width:22px; height:22px; font-size:10px; margin:0; color:#b9770e;" title="Abierta">${oT.abie}</div>` : ''}
+                    <span style="font-size: 0.7rem; opacity: 0.8; margin-left: 5px;">(${aOrdersByTech.length})</span>
+                </div>
+            </div>
         `;
 
         oTechHeader.onclick = () => {
@@ -411,14 +435,15 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
             
             const sWarningIcon = oOrder.status === "status-abie" ? "⚠️ " : "";
             const sLockIcon = bIsLocked ? "🔒 " : "";
+            const sCleanId = oOrder.id.replace(/^0+/, ""); // Quita ceros a la izquierda
 
             oBar.innerHTML = `
-                <div class="bar-id" style="pointer-events:none; font-size: 0.7rem; font-weight: bold; opacity: 0.9;">
-                     ${sLockIcon}${sWarningIcon}Orden: ${oOrder.id}
-                 </div>
-                <div class="bar-equipment" style="pointer-events:none; font-size: 0.65rem;">EQ: ${(oOrder as any).equipment || "N/A"}</div>
-                <div class="bar-customer" style="pointer-events:none; font-size: 0.65rem;">${(oOrder as any).customerName || "N/A"}</div>
-            `;
+    <div class="bar-id" style="pointer-events:none; font-size: 0.7rem; font-weight: bold; opacity: 0.9;">
+         ${sLockIcon}${sWarningIcon}Orden: ${sCleanId}
+     </div>
+    <div class="bar-equipment" style="pointer-events:none; font-size: 0.65rem;">EQ: ${(oOrder as any).equipment || "N/A"}</div>
+    <div class="bar-customer" style="pointer-events:none; font-size: 0.65rem;">${(oOrder as any).customerName || "N/A"}</div>
+`;
 
             oRow.appendChild(oBar);
             oContainer.appendChild(oRow);
@@ -441,6 +466,18 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
         if (oSearchField && oSearchField.getValue()) {
             this.onSearchGantt({ getParameter: () => oSearchField.getValue() });
         }
+
+        // *** CAMBIO: Scroll automático a la fecha actual (Hoy) ***
+        setTimeout(() => {
+            const iScrollTarget = iTodayOffset * iDayWidth;
+            const oDivScroll = document.getElementById("realGanttId")?.parentElement;
+            if (oDivScroll) {
+                oDivScroll.scrollTo({
+                    left: iScrollTarget - (window.innerWidth / 3), 
+                    behavior: 'smooth'
+                });
+            }
+        }, 700);
     }
 }
     // ESTA ES LA FUNCIÓN QUE FALTABA
@@ -494,8 +531,8 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
     if (!orderId) return;
 
     const oModel = this.getView()!.getModel("plan") as JSONModel;
-    const aOrders = oModel.getProperty("/orders") as MaintenanceOrder[];
-    const oOrder = aOrders.find(o => o.id === orderId);
+    const aOrders = oModel.getProperty("/orders") || [];
+    const oOrder = aOrders.find((o: any) => o.id === orderId);
 
     if (oOrder) {
         // --- 1. VALIDACIÓN DE BLOQUEO POR ESTATUS ---
@@ -567,6 +604,9 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
 
         // 8. REFRESCAR GANTT
         this._renderCustomGantt();
+        
+        // *** CAMBIO: Actualización de contadores tras mover la orden ***
+        this._updateOrderSummary();
         
         MessageToast.show(`Orden ${oOrder.id} movida correctamente`);
         console.log("Cambio registrado:", oChange);
@@ -845,4 +885,121 @@ private _updateTechHeadersVisibility(): void {
         oHeader.style.display = bHasVisibleOrders ? "flex" : "none";
     }
 }
+
+// *** CAMBIO: Nueva función para exportar a Excel con 3 pestañas ***
+    // *** CAMBIO: Función de exportación actualizada (Sin cronograma y con descripciones de estado) ***
+// *** CAMBIO: Función de exportación con ordenamiento cronológico y descripciones ***
+// *** CAMBIO: Función de exportación con limpieza de ceros y título de meses dinámico ***
+public async onExportExcel(): Promise<void> {
+    const oView = this.getView();
+    oView!.setBusy(true);
+    try {
+        if (!(window as any).XLSX) {
+            await this._loadLibrary("https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js");
+        }
+        const XLSX = (window as any).XLSX;
+        const oModel = oView!.getModel("plan") as JSONModel;
+        const aOrders = oModel.getProperty("/orders") || [];
+        const oSummary = oModel.getProperty("/summary") || {};
+        
+        // Obtener rango de fechas para el nombre del archivo
+        const oRange = this.byId("rangeSelection") as any;
+        const dStartReq = oRange.getDateValue();
+        const dEndReq = oRange.getSecondDateValue();
+
+        // Lógica para el nombre del mes
+        const fnGetMonthName = (d: Date) => d.toLocaleDateString('es-ES', { month: 'long' }).toUpperCase();
+        let sPeriodo = fnGetMonthName(dStartReq);
+        if (dStartReq.getMonth() !== dEndReq.getMonth()) {
+            sPeriodo += `-${fnGetMonthName(dEndReq)}`;
+        }
+
+        // --- MAPEO DE DESCRIPCIONES DE ESTADO ---
+        const fnGetStatusDesc = (sStatus: string) => {
+            switch (sStatus) {
+                case "status-u100": return "Orden Pendiente";
+                case "status-u200": return "Orden En proceso";
+                case "status-u300": return "Orden Finalizada";
+                case "status-u400": return "Orden Pendiente de firma";
+                case "status-abie": return "Orden Planificada SAP";
+                default: return "Orden Liberada SAP Y BTP";
+            }
+        };
+
+        // Ordenar por fecha inicio y limpiar ceros del ID
+        const aSortedOrders = [...aOrders].sort((a: any, b: any) => a.start.getTime() - b.start.getTime());
+
+        // 1. Pestaña Maestro
+        const aMaestro = aSortedOrders.map((o: any) => ({
+            "Orden": o.id.replace(/^0+/, ""), // *** CAMBIO: Quita ceros a la izquierda ***
+            "Descripción": o.desc, 
+            "Mecánico": o.technician,
+            "Equipo": o.equipment, 
+            "Cliente": o.customerName,
+            "Fecha Inicio": o.start.toLocaleDateString('es-ES'), 
+            "Fecha Fin": o.end.toLocaleDateString('es-ES'),
+            "Estado": fnGetStatusDesc(o.status)
+        }));
+        
+        const wsMaestro = XLSX.utils.json_to_sheet(aMaestro);
+
+        // 2. Pestaña Resumen
+        const aDashboard = [
+            { "Indicador": "Pendientes", "Total": oSummary.u100 },
+            { "Indicador": "En Proceso", "Total": oSummary.u200 },
+            { "Indicador": "Finalizadas", "Total": oSummary.u300 },
+            { "Indicador": "Pendiente Firma", "Total": oSummary.u400 },
+            { "Indicador": "Abiertas", "Total": oSummary.abie },
+            { "Indicador": "Cambios sin Guardar", "Total": oSummary.changed }
+        ];
+        const wsDashboard = XLSX.utils.json_to_sheet(aDashboard);
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, wsMaestro, "Reporte");
+        XLSX.utils.book_append_sheet(wb, wsDashboard, "Resumen");
+
+        // *** CAMBIO: Nombre de archivo dinámico con el mes solicitado ***
+        XLSX.writeFile(wb, `Reporte_Planificacion_${sPeriodo}.xlsx`);
+        
+        MessageToast.show("Excel generado correctamente.");
+    } catch (e) { 
+        MessageBox.error("Error al exportar."); 
+    }
+    finally { 
+        oView!.setBusy(false); 
+    }
+}
+
+// *** CAMBIO: La función _loadLibrary se mantiene igual para cargar el script ***
+private _loadLibrary(sSrc: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = sSrc;
+        script.onload = () => resolve();
+        script.onerror = () => reject();
+        document.head.appendChild(script);
+    });
+}
+// *** CAMBIO: Lógica para Expandir Todo ***
+// *** CAMBIO: Lógica para Expandir Todo el Gantt ***
+public onExpandAll(): void {
+    // Reiniciamos el mapa de colapsos para que todo sea visible
+    this._mCollapsedGroups = {}; 
+    this._renderCustomGantt();
+}
+
+// *** CAMBIO: Lógica para Colapsar Todo el Gantt ***
+public onCollapseAll(): void {
+    const oModel = this.getView()!.getModel("plan") as JSONModel;
+    const aOrders = oModel.getProperty("/orders") || [];
+    
+    // Recorremos las órdenes para identificar a todos los mecánicos y marcarlos como colapsados
+    aOrders.forEach((oOrder: MaintenanceOrder) => {
+        const tech = oOrder.technician || "Sin Asignar";
+        this._mCollapsedGroups[tech] = true;
+    });
+
+    this._renderCustomGantt();
+}
+
 }
