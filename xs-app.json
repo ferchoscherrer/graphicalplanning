@@ -8,7 +8,7 @@
       "destination": "onPremECC_PRO",
       "authenticationType": "none",
       "csrfProtection": false
-    },git add .
+    },
     {
       "source": "^/resources/(.*)$",
       "target": "/resources/$1",

@@ -191,7 +191,7 @@ private async _loadDashboardData(): Promise<void> {
         oEndDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
     } else {
         oStartDate.setHours(0, 0, 0, 0);
-        oEndDate.setHours(23, 59, 59, 999);
+        oEndDate.setHours(0, 0, 0, 0);
     }
 
     // Sincronizar el inicio del proyecto para el renderizado del Gantt
