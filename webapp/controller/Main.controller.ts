@@ -41,6 +41,7 @@ export default class Main extends Controller {
 }
 
 public onInit(): void {
+    
     // 1. Calcular fechas por defecto (Mes en curso)
     const oNow = new Date();
     const oFirstDay = new Date(oNow.getFullYear(), oNow.getMonth(), 1);
@@ -52,7 +53,12 @@ public onInit(): void {
         orders: [],
         isBusy: true,
         // *** CAMBIO: Inicialización de la estructura de resumen para los contadores ***
-        summary: { u100: 0, u200: 0, u300: 0, u400: 0, abie: 0, others: 0, changed: 0 }
+        summary: { u100: 0, u200: 0, u300: 0, u400: 0, abie: 0, others: 0, changed: 0,
+            // NUEVO: Arreglos vacíos para los MicroCharts
+            supervisors: [],
+            mecanicos: [],
+            zonas: []
+         }
     });
     this.getView()!.setModel(oViewModel, "plan");
     this.getView()!.setBusyIndicatorDelay(0);
@@ -101,6 +107,9 @@ public onInit(): void {
         };
         oView.attachModelContextChange(fnChange);
     }
+    this.getView()!.bindElement({
+    path: "plan>/"
+});
 }
 
 public onExit(): void {
@@ -116,6 +125,7 @@ private _handleBeforeUnload(oEvent: BeforeUnloadEvent): void {
         oEvent.returnValue = ''; 
     }
 }
+
 
 private _handleBrowserBack(oEvent: any): void {
     if (this._aPendingChanges && this._aPendingChanges.length > 0) {
@@ -146,78 +156,84 @@ private _handleBrowserBack(oEvent: any): void {
 
 // *** NUEVO MÉTODO: Lógica de conteo para el dashboard dinámico ***
 private _updateOrderSummary(): void {
-    const oPlanModel = this.getView()!.getModel("plan") as JSONModel;
+    const oView = this.getView();
+    if (!oView) return;
+
+    const oPlanModel = oView.getModel("plan") as JSONModel;
     const aOrders = oPlanModel.getProperty("/orders") || [];
     
-    const oSummary = {
+    // 1. Obtenemos el objeto summary actual para NO borrar lo que ya tiene (como supervisors)
+    const oCurrentSummary = oPlanModel.getProperty("/summary") || {};
+
+    // 2. Creamos los nuevos contadores
+    const oNewCounters = {
         u100: 0, u200: 0, u300: 0, u400: 0, abie: 0, others: 0,
-        changed: this._aPendingChanges ? this._aPendingChanges.length : 0
+        changed: (this as any)._aPendingChanges ? (this as any)._aPendingChanges.length : 0
     };
 
     aOrders.forEach((oOrder: any) => {
         switch (oOrder.status) {
-            case "status-u100": oSummary.u100++; break;
-            case "status-u200": oSummary.u200++; break;
-            case "status-u300": oSummary.u300++; break;
-            case "status-u400": oSummary.u400++; break;
-            case "status-abie": oSummary.abie++; break;
-            default: oSummary.others++; break;
+            case "status-u100": oNewCounters.u100++; break;
+            case "status-u200": oNewCounters.u200++; break;
+            case "status-u300": oNewCounters.u300++; break;
+            case "status-u400": oNewCounters.u400++; break;
+            case "status-abie": oNewCounters.abie++; break;
+            default: oNewCounters.others++; break;
         }
     });
 
-    oPlanModel.setProperty("/summary", oSummary);
+    // 3. MERGE: Combinamos los contadores nuevos con los datos existentes (supervisors, etc.)
+    const oFinalSummary = Object.assign({}, oCurrentSummary, oNewCounters);
+
+    // 4. Seteamos el objeto completo sin destruir las otras propiedades
+    oPlanModel.setProperty("/summary", oFinalSummary);
+    
+    console.log("GanttLog: Resumen actualizado respetando MicroCharts", oFinalSummary);
 }
 
 private async _loadDashboardData(): Promise<void> {
     const oView = this.getView();
     const oRange = this.byId("rangeSelection") as any; 
     
-    
     if (!oView || !this.oDataModel || !oRange) return;
 
-    // 1. Bloqueo total de la pantalla (UI) e indicador de carga inmediato
     oView.setBusy(true); 
 
+    const sEmail = (sap as any).ushell?.Container?.getService("UserInfo")?.getUser()?.getEmail() 
+                   || "sapmelmex@melco.com.mx";
     const oPlanModel = oView.getModel("plan") as JSONModel;
     oPlanModel.setProperty("/isBusy", true);
 
-    // Obtener fechas del control UI
     let oStartDate = oRange.getDateValue();
     let oEndDate = oRange.getSecondDateValue();
 
-    // Normalización de fechas para asegurar el rango correcto
     if (!oStartDate || !oEndDate) {
         oStartDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         oEndDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
     } else {
         oStartDate.setHours(0, 0, 0, 0);
-        oEndDate.setHours(0, 0, 0, 0);
+        oEndDate.setHours(0, 0, 0, 0); // <--- CAMBIO: Asegurar fin de día para el filtro
     }
 
-    // Sincronizar el inicio del proyecto para el renderizado del Gantt
     oPlanModel.setProperty("/startDateProject", oStartDate);
 
     try {
-        // Filtros para la llamada OData
         const aFilters = [
+            new Filter("Userstatus", FilterOperator.EQ, sEmail),
             new Filter("StartDate", FilterOperator.BT, oStartDate),
             new Filter("FinishDate", FilterOperator.BT, oEndDate)
         ];
 
-        // 2. Llamada al módulo ERP
         const oResponse = await ERP.getDataERP("/WorkOrderHeaderSet", this.oDataModel, aFilters);
         
         if (oResponse?.data?.results) {
-            // --- FILTRADO POR TIPO DE ORDEN SM02 ---
             const aRawResults = oResponse.data.results;
-            console.log (aRawResults)
             const aFilteredResults = aRawResults.filter((item: any) => {
-                // Verificamos el tipo de orden (AUART o OrderType según el servicio)
                 const sType = item.OrderType || item.Auart || "";
                 return sType.toUpperCase() === "SM02";
             });
 
-            // 3. Mapeo de los resultados filtrados al formato del Gantt
+            // 1. Mapeo de órdenes (Mantenemos tu lógica)
             const aMappedOrders: MaintenanceOrder[] = aFilteredResults.map((sapItem: any) => {
                 const dStartRaw = new Date(sapItem.StartDate);
                 const dEndRaw = new Date(sapItem.FinishDate);
@@ -244,23 +260,223 @@ private async _loadDashboardData(): Promise<void> {
                 };
             });
 
-            // Actualizar modelo y redibujar
+            // 2. Actualizar órdenes primero
             oPlanModel.setProperty("/orders", aMappedOrders);
             
-            // *** CAMBIO: Actualización de contadores tras cargar datos ***
+            // 3. PROCESAMIENTO DE MICROCHARTS <--- CAMBIO: Se ejecuta DESPUÉS de tener aMappedOrders
+            // Pasamos aFilteredResults para tener acceso a Userstatus original
+            this._computeSupervisorStats(aFilteredResults); 
+            this._computeMecanicoStats(aFilteredResults);
+            this._computeZonaStats(aFilteredResults);
+
+            // 4. Actualización de contadores y Gantt
             this._updateOrderSummary();
-            
             this._renderCustomGantt();
         }
     } catch (oError) {
         console.error("Error en la carga de datos:", oError);
         MessageBox.error("No se pudo conectar con el servicio de órdenes SAP.");
     } finally {
-        // 4. Desbloqueo de la pantalla (Ocurre siempre)
         oPlanModel.setProperty("/isBusy", false);
         oView.setBusy(false);
     }
 }
+
+/**
+ * NUEVA FUNCIÓN: Procesa estadísticas de supervisores basándose en los resultados de SM02
+ */
+/**
+ * Procesa estadísticas de supervisores basándose en los resultados de SM02
+ */
+private _computeSupervisorStats(aFilteredResults: any[]): void {
+    const oView = this.getView();
+    if (!oView) return;
+
+    const oPlanModel = oView.getModel("plan") as any;
+    const mGroups: any = {};
+    
+    // Arreglo auxiliar para el log de auditoría
+    const aAuditLog: any[] = [];
+
+    // 1. Agrupamos por supervisor y auditamos el estatus
+    aFilteredResults.forEach(oItem => {
+        const sName = oItem.NombreSup || oItem.Supervisor || "Sin Asignar";
+        const sOrderId = oItem.Orderid || oItem.Aufnr || "S/N";
+        const sStatus = oItem.Userstatus || "";
+
+        if (!mGroups[sName]) {
+            mGroups[sName] = { total: 0, completed: 0 };
+        }
+        
+        mGroups[sName].total++;
+        
+        // Lógica de completado
+        const bIsCompleted = (sStatus === "0300" || sStatus === "U300");
+        
+        if (bIsCompleted) {
+            mGroups[sName].completed++;
+        }
+
+        // Guardamos en el log de auditoría para el console.log
+        aAuditLog.push({
+            Supervisor: sName,
+            Orden: sOrderId,
+            StatusOriginal: sStatus,
+            EsCompletada: bIsCompleted ? "SÍ" : "NO"
+        });
+    });
+
+    // --- CONSOLE LOG DE AUDITORÍA ---
+    console.log("GanttLog: Detalle de procesamiento de órdenes para MicroChart:");
+    console.table(aAuditLog); 
+
+    // 2. Mapeamos al formato del Chart
+    const aData = Object.keys(mGroups).map((sKey) => {
+        const iTotal = mGroups[sKey].total;
+        const iCompleted = mGroups[sKey].completed;
+        const iRealPercent = Math.round((iCompleted / iTotal) * 100) || 0;
+
+        return {
+            Title: String(sKey),
+            Value: Number(iRealPercent),
+            Color: iRealPercent >= 75 ? "Good" : (iRealPercent >= 40 ? "Critical" : "Error")
+        };
+    })
+
+    // 3. Actualizamos modelo
+    oPlanModel.setProperty("/summary/supervisors", aData);
+
+    // 4. Forzamos refresco visual
+    setTimeout(() => {
+        const oChart = oView.byId("supervisorChart") as any;
+        if (oChart) {
+            const oBinding = oChart.getBinding("data");
+            if (oBinding) oBinding.refresh(true);
+            oChart.invalidate(); 
+        }
+    }, 300);
+}
+
+private _computeMecanicoStats(aFilteredResults: any[]): void {
+    const oView = this.getView();
+    if (!oView) return;
+
+    const oPlanModel = oView.getModel("plan") as any;
+    const mGroups: any = {};
+    const aAuditLog: any[] = [];
+
+    aFilteredResults.forEach(oItem => {
+        // Usamos NombreMec o el campo que identifique al técnico
+        const sName = oItem.NombreMec || oItem.Technician || "Sin Asignar";
+        const sOrderId = oItem.Orderid || oItem.Aufnr || "S/N";
+        const sStatus = oItem.Userstatus || "";
+
+        if (!mGroups[sName]) {
+            mGroups[sName] = { total: 0, completed: 0 };
+        }
+        
+        mGroups[sName].total++;
+        
+        const bIsCompleted = (sStatus === "0300" || sStatus === "U300");
+        if (bIsCompleted) {
+            mGroups[sName].completed++;
+        }
+
+        aAuditLog.push({
+            Mecanico: sName,
+            Orden: sOrderId,
+            Status: sStatus,
+            EsCompletada: bIsCompleted ? "SÍ" : "NO"
+        });
+    });
+
+    console.log("GanttLog: Detalle Mecánicos:");
+    console.table(aAuditLog);
+
+    const aData = Object.keys(mGroups).map((sKey) => {
+        const iTotal = mGroups[sKey].total;
+        const iCompleted = mGroups[sKey].completed;
+        const iRealPercent = Math.round((iCompleted / iTotal) * 100) || 0;
+
+        return {
+            Title: String(sKey),
+            Value: Number(iRealPercent),
+            // Color según desempeño del mecánico
+            Color: iRealPercent >= 80 ? "Good" : (iRealPercent >= 50 ? "Critical" : "Error")
+        };
+    }); // Aquí NO filtramos por Value > 0 para que veas a todos los mecánicos asignados
+
+    // Guardamos en la propiedad 'mecanicos' que definiste en el onInit
+    oPlanModel.setProperty("/summary/mecanicos", aData);
+
+    setTimeout(() => {
+        const oChart = oView.byId("mecanicosChart") as any;
+        if (oChart) {
+            oChart.getBinding("data")?.refresh(true);
+            oChart.invalidate(); 
+        }
+    }, 300);
+}
+
+private _computeZonaStats(aFilteredResults: any[]): void {
+    const oView = this.getView();
+    if (!oView) return;
+
+    const oPlanModel = oView.getModel("plan") as any;
+    const mGroups: any = {};
+    const aAuditLog: any[] = [];
+
+    aFilteredResults.forEach(oItem => {
+        // AJUSTE: Usa el campo que represente la Zona/Emplazamiento en tu OData
+        const sName = oItem.Base || oItem.Zona || "Sin Zona";
+        const sOrderId = oItem.Orderid || oItem.Aufnr || "S/N";
+        const sStatus = oItem.Userstatus || "";
+
+        if (!mGroups[sName]) {
+            mGroups[sName] = { total: 0, completed: 0 };
+        }
+        
+        mGroups[sName].total++;
+        
+        const bIsCompleted = (sStatus === "0300" || sStatus === "U300");
+        if (bIsCompleted) {
+            mGroups[sName].completed++;
+        }
+
+        aAuditLog.push({
+            Zona: sName,
+            Orden: sOrderId,
+            Status: sStatus,
+            EsCompletada: bIsCompleted ? "SÍ" : "NO"
+        });
+    });
+
+    console.log("GanttLog: Detalle Zonas:");
+    console.table(aAuditLog);
+
+    const aData = Object.keys(mGroups).map((sKey) => {
+        const iTotal = mGroups[sKey].total;
+        const iCompleted = mGroups[sKey].completed;
+        const iRealPercent = Math.round((iCompleted / iTotal) * 100) || 0;
+
+        return {
+            Title: String(sKey),
+            Value: Number(iRealPercent),
+            Color: iRealPercent >= 80 ? "Good" : (iRealPercent >= 50 ? "Critical" : "Error")
+        };
+    });
+
+    oPlanModel.setProperty("/summary/zonas", aData);
+
+    setTimeout(() => {
+        const oChart = oView.byId("zonasChart") as any;
+        if (oChart) {
+            oChart.getBinding("data")?.refresh(true);
+            oChart.invalidate(); 
+        }
+    }, 300);
+}
+
 
 private _mapStatus(sStatus: string): string {
     if (!sStatus) return "status-default";

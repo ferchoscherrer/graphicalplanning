@@ -69,7 +69,8 @@
       "minUI5Version": "1.145.0",
       "libs": {
         "sap.m": {},
-        "sap.ui.core": {}
+        "sap.ui.core": {},
+        "sap.suite.ui.microchart": {}
       }
     },
     "contentDensities": {

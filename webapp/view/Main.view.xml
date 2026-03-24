@@ -1,85 +1,148 @@
 <mvc:View controllerName="graphicalplanning.controller.Main"
     xmlns:mvc="sap.ui.core.mvc" displayBlock="true"
-    xmlns="sap.m" xmlns:core="sap.ui.core">
+    xmlns="sap.m" 
+    xmlns:core="sap.ui.core"
+    xmlns:mc="sap.suite.ui.microchart">
     <Page id="page" title="BTP Custom Maintenance Planner">
         <content>
             <VBox class="sapUiSmallMargin">
+                
+                <Panel headerText="Panel de Rendimiento Global" expandable="true" expanded="true" class="sapUiMediumMarginBottom">
+                    <FlexBox wrap="Wrap" justifyContent="SpaceAround" alignItems="Center">
+                        
+                       <VBox width="400px" justifyContent="Center" alignItems="Center" class="sapUiMediumMarginEnd">
+    <Label text="Rendimiento por Supervisor" design="Bold"/>
+   <mc:ComparisonMicroChart 
+    id="supervisorChart" 
+    size="M" 
+    width="100%"
+    data="{plan>/summary/supervisors}"> <mc:data>
+        <mc:ComparisonMicroChartData 
+           title="{plan>Title}" 
+                value="{plan>Value}" 
+                displayValue="{plan>Value}%" 
+                color="{plan>Color}"/> </mc:data>
+</mc:ComparisonMicroChart>
+</VBox>
+
+                       <VBox width="400px" justifyContent="Center" alignItems="Center" class="sapUiMediumMarginEnd">
+    <Label text="Eficiencia por Mecánico" design="Bold" class="sapUiSmallMarginBottom"/>
+    
+    <mc:ComparisonMicroChart 
+        id="mecanicosChart" 
+        size="M" 
+        width="100%"
+        height="120px"
+        data="{plan>/summary/mecanicos}">
+        <mc:data>
+            <mc:ComparisonMicroChartData 
+                title="{plan>Title}" 
+                value="{plan>Value}"
+                displayValue="{plan>Value}%"  
+                color="{plan>Color}"/>
+        </mc:data>
+    </mc:ComparisonMicroChart>
+</VBox>
+
+
+<VBox width="400px" justifyContent="Center" alignItems="Center" class="sapUiMediumMarginEnd">
+    <Label text="Rendimiento por Zona" design="Bold" class="sapUiSmallMarginBottom"/>
+    
+    <mc:ComparisonMicroChart 
+        id="zonasChart" 
+        size="M" 
+        width="100%"
+        height="120px"
+        data="{plan>/summary/zonas}">
+        <mc:data>
+            <mc:ComparisonMicroChartData 
+                title="{plan>Title}" 
+                value="{plan>Value}" 
+                displayValue="{plan>Value}%" 
+                color="{plan>Color}"/>
+        </mc:data>
+    </mc:ComparisonMicroChart>
+</VBox>
+
+                    </FlexBox>
+                </Panel>
+
                 <Title text="Cronograma de Órdenes" level="H2" class="sapUiMediumMarginBottom" />
                 
                 <OverflowToolbar class="sapUiTinyMarginBottom">
-    <Label text="Periodo de Planificación:" />
-    <DateRangeSelection id="rangeSelection" width="250px" change="._loadDashboardData" displayFormat="dd/MM/yyyy"/>
-    
-    <ToolbarSeparator />
-    
-    <SearchField 
-        id="searchOrders" 
-        placeholder="Buscar orden, equipo o cliente..." 
-        width="300px" 
-        liveChange=".onSearchGantt" />
+                    <Label text="Periodo de Planificación:" />
+                    <DateRangeSelection id="rangeSelection" width="250px" change="._loadDashboardData" displayFormat="dd/MM/yyyy"/>
+                    
+                    <ToolbarSeparator />
+                    
+                    <SearchField 
+                        id="searchOrders" 
+                        placeholder="Buscar orden, equipo o cliente..." 
+                        width="300px" 
+                        liveChange=".onSearchGantt" />
 
-    <ToolbarSpacer />
-    
-    <Button id="btnSave" icon="sap-icon://save" text="Guardar Cambios" type="Accept" enabled="false" press=".onSaveSAP" class="sapUiTinyMarginEnd"/>
-    <Button id="btnReset" icon="sap-icon://reset" text="Descartar Cambios" type="Transparent" enabled="false" press=".onResetChanges" />
-    <Button icon="sap-icon://refresh" text="Recargar" press="._loadDashboardData" type="Emphasized"/>
-    <Button 
-    icon="sap-icon://excel-attachment" 
-    text="Exportar Excel" 
-    press=".onExportExcel" 
-    type="Default" />
-    <ToolbarSeparator />
-<Button 
-    icon="sap-icon://expand-group" 
-    text="Expandir Todo"
-    tooltip="Mostrar órdenes " 
-    press=".onExpandAll" 
-    type="Transparent" />
-<Button 
-    icon="sap-icon://collapse-group" 
-    text="Colapsar Todo"
-    tooltip="Ocultar órdenes" 
-    press=".onCollapseAll" 
-    type="Transparent" />
-<ToolbarSeparator />
-</OverflowToolbar>
+                    <ToolbarSpacer />
+                    
+                    <Button id="btnSave" icon="sap-icon://save" text="Guardar Cambios" type="Accept" enabled="false" press=".onSaveSAP" class="sapUiTinyMarginEnd"/>
+                    <Button id="btnReset" icon="sap-icon://reset" text="Descartar Cambios" type="Transparent" enabled="false" press=".onResetChanges" />
+                    <Button icon="sap-icon://refresh" text="Recargar" press="._loadDashboardData" type="Emphasized"/>
+                    <Button 
+                        icon="sap-icon://excel-attachment" 
+                        text="Exportar Excel" 
+                        press=".onExportExcel" 
+                        type="Default" />
+                    <ToolbarSeparator />
+                    <Button 
+                        icon="sap-icon://expand-group" 
+                        text="Expandir Todo"
+                        tooltip="Mostrar órdenes " 
+                        press=".onExpandAll" 
+                        type="Transparent" />
+                    <Button 
+                        icon="sap-icon://collapse-group" 
+                        text="Colapsar Todo"
+                        tooltip="Ocultar órdenes" 
+                        press=".onCollapseAll" 
+                        type="Transparent" />
+                    <ToolbarSeparator />
+                </OverflowToolbar>
 
-<HBox class="gantt-legend sapUiSmallMarginBottom" wrap="Wrap" justifyContent="Start" alignItems="Center">
-    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
-        <core:HTML content='&lt;div class="legend-box status-u100"&gt;{plan>/summary/u100}&lt;/div&gt;' />
-        <Text text="Orden Pendiente" class="sapUiTinyMarginBegin" />
-    </HBox>
-    
-    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
-        <core:HTML content='&lt;div class="legend-box status-u200"&gt;{plan>/summary/u200}&lt;/div&gt;' />
-        <Text text="Orden En proceso" class="sapUiTinyMarginBegin" />
-    </HBox>
-    
-    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
-        <core:HTML content='&lt;div class="legend-box status-u300"&gt;{plan>/summary/u300}&lt;/div&gt;' />
-        <Text text="Orden Finalizada" class="sapUiTinyMarginBegin" />
-    </HBox>
-    
-    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
-        <core:HTML content='&lt;div class="legend-box status-u400"&gt;{plan>/summary/u400}&lt;/div&gt;' />
-        <Text text="Orden Pendiente de firma" class="sapUiTinyMarginBegin" />
-    </HBox>
-    
-    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
-    <core:HTML content='&lt;div class="legend-box status-abie" style="font-size:12px; color:#b9770e;"&gt;⚠️ {plan>/summary/abie}&lt;/div&gt;' />
-    <Text text="Orden Planificada SAP" class="sapUiTinyMarginBegin" />
-</HBox>
+                <HBox class="gantt-legend sapUiSmallMarginBottom" wrap="Wrap" justifyContent="Start" alignItems="Center">
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
+                        <core:HTML content='&lt;div class="legend-box status-u100"&gt;{plan>/summary/u100}&lt;/div&gt;' />
+                        <Text text="Orden Pendiente" class="sapUiTinyMarginBegin" />
+                    </HBox>
+                    
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
+                        <core:HTML content='&lt;div class="legend-box status-u200"&gt;{plan>/summary/u200}&lt;/div&gt;' />
+                        <Text text="Orden En proceso" class="sapUiTinyMarginBegin" />
+                    </HBox>
+                    
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
+                        <core:HTML content='&lt;div class="legend-box status-u300"&gt;{plan>/summary/u300}&lt;/div&gt;' />
+                        <Text text="Orden Finalizada" class="sapUiTinyMarginBegin" />
+                    </HBox>
+                    
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
+                        <core:HTML content='&lt;div class="legend-box status-u400"&gt;{plan>/summary/u400}&lt;/div&gt;' />
+                        <Text text="Orden Pendiente de firma" class="sapUiTinyMarginBegin" />
+                    </HBox>
+                    
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
+                        <core:HTML content='&lt;div class="legend-box status-abie" style="font-size:12px; color:#b9770e;"&gt;⚠️ {plan>/summary/abie}&lt;/div&gt;' />
+                        <Text text="Orden Planificada SAP" class="sapUiTinyMarginBegin" />
+                    </HBox>
 
-    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
-        <core:HTML content='&lt;div class="legend-box status-default"&gt;{plan>/summary/others}&lt;/div&gt;' />
-        <Text text="Orden Liberada SAP Y BTP" class="sapUiTinyMarginBegin" />
-    </HBox>
-    
-    <HBox alignItems="Center" class="legend-item">
-        <core:HTML content='&lt;div class="legend-box order-changed" style="background:#666; color:white; font-size:10px; font-weight:bold; display:flex; justify-content:center; align-items:center;"&gt;{plan>/summary/changed}&lt;/div&gt;' />
-        <Text text="Cambio sin guardar" class="sapUiTinyMarginBegin" />
-    </HBox>
-</HBox>
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
+                        <core:HTML content='&lt;div class="legend-box status-default"&gt;{plan>/summary/others}&lt;/div&gt;' />
+                        <Text text="Orden Liberada SAP Y BTP" class="sapUiTinyMarginBegin" />
+                    </HBox>
+                    
+                    <HBox alignItems="Center" class="legend-item">
+                        <core:HTML content='&lt;div class="legend-box order-changed" style="background:#666; color:white; font-size:10px; font-weight:bold; display:flex; justify-content:center; align-items:center;"&gt;{plan>/summary/changed}&lt;/div&gt;' />
+                        <Text text="Cambio sin guardar" class="sapUiTinyMarginBegin" />
+                    </HBox>
+                </HBox>
 
                 <ScrollContainer busy="{plan>/isBusy}" width="100%" height="900px" horizontal="true" vertical="true">
                     <core:HTML id="myGanttHtml" preferDOM="true"
