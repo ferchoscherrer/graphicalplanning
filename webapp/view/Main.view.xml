@@ -2,71 +2,83 @@
     xmlns:mvc="sap.ui.core.mvc" displayBlock="true"
     xmlns="sap.m" 
     xmlns:core="sap.ui.core"
+    xmlns:f="sap.f"
+    xmlns:card="sap.f.cards"
     xmlns:mc="sap.suite.ui.microchart">
     <Page id="page" title="BTP Custom Maintenance Planner">
         <content>
             <VBox class="sapUiSmallMargin">
                 
-                <Panel headerText="Panel de Rendimiento Global" expandable="true" expanded="true" class="sapUiMediumMarginBottom">
-                    <FlexBox wrap="Wrap" justifyContent="SpaceAround" alignItems="Center">
-                        
-                       <VBox width="400px" justifyContent="Center" alignItems="Center" class="sapUiMediumMarginEnd">
-    <Label text="Rendimiento por Supervisor" design="Bold"/>
-   <mc:ComparisonMicroChart 
-    id="supervisorChart" 
-    size="M" 
-    width="100%"
-    data="{plan>/summary/supervisors}"> <mc:data>
-        <mc:ComparisonMicroChartData 
-           title="{plan>Title}" 
-                value="{plan>Value}" 
-                displayValue="{plan>Value}%" 
-                color="{plan>Color}"/> </mc:data>
-</mc:ComparisonMicroChart>
-</VBox>
+<Panel headerText="Panel de Rendimiento Global" expandable="true" expanded="true" class="sapUiMediumMarginBottom AreaBackground">
+    <FlexBox wrap="Wrap" justifyContent="SpaceBetween" alignItems="Start" backgroundDesign="Solid" class="sapUiSmallMargin sapUiAreaForegroundStretched">
+        <items>
+            
+            <VBox class="sapUiNoContentPadding" width="31%" style="border-right: 1px solid #d9d9d9; padding-right: 1.5rem;">
+                <VBox style="background-color: #ebeef0; border-radius: 4px; padding: 0.5rem 0.8rem;" class="sapUiSmallMarginBottom">
+                    <HBox justifyContent="SpaceBetween" alignItems="Center">
+                        <HBox alignItems="Center">
+                            <core:Icon src="sap-icon://manager" class="sapUiTinyMarginEnd" color="Default" size="1.1rem" />
+                            <Title text="Supervisores" level="H5" titleStyle="H5" />
+                        </HBox>
+                        <ObjectStatus text="{= ${plan>/summary/supervisors}.length } Activos" state="None" />
+                    </HBox>
+                </VBox>
 
-                       <VBox width="400px" justifyContent="Center" alignItems="Center" class="sapUiMediumMarginEnd">
-    <Label text="Eficiencia por Mecánico" design="Bold" class="sapUiSmallMarginBottom"/>
-    
-    <mc:ComparisonMicroChart 
-        id="mecanicosChart" 
-        size="M" 
-        width="100%"
-        height="120px"
-        data="{plan>/summary/mecanicos}">
-        <mc:data>
-            <mc:ComparisonMicroChartData 
-                title="{plan>Title}" 
-                value="{plan>Value}"
-                displayValue="{plan>Value}%"  
-                color="{plan>Color}"/>
-        </mc:data>
-    </mc:ComparisonMicroChart>
-</VBox>
+                <ScrollContainer height="280px" vertical="true" horizontal="false" class="sapUiNoContentPadding">
+                    <mc:ComparisonMicroChart id="supervisorChart" size="Responsive" width="100%" 
+                        isAllowedToOverflow="true" data="{plan>/summary/supervisors}" press="onChartPress" minValue="0" maxValue="100">
+                        <mc:data>
+                            <mc:ComparisonMicroChartData title="{plan>Title}" value="{plan>Value}" displayValue="{plan>Value}%" color="{plan>Color}"/>
+                        </mc:data>
+                    </mc:ComparisonMicroChart>
+                </ScrollContainer>
+            </VBox>
 
+            <VBox class="sapUiNoContentPadding" width="31%" style="border-right: 1px solid #d9d9d9; padding-right: 1.5rem; margin-left: 1rem;">
+                <VBox style="background-color: #ebeef0; border-radius: 4px; padding: 0.5rem 0.8rem;" class="sapUiSmallMarginBottom">
+                    <HBox justifyContent="SpaceBetween" alignItems="Center">
+                        <HBox alignItems="Center">
+                            <core:Icon src="sap-icon://wrench" class="sapUiTinyMarginEnd" color="Default" size="1.1rem" />
+                            <Title text="Mecánicos" level="H5" titleStyle="H5" />
+                        </HBox>
+                        <ObjectStatus text="{= ${plan>/summary/mecanicos}.length } Técnicos" state="None" />
+                    </HBox>
+                </VBox>
 
-<VBox width="400px" justifyContent="Center" alignItems="Center" class="sapUiMediumMarginEnd">
-    <Label text="Rendimiento por Zona" design="Bold" class="sapUiSmallMarginBottom"/>
-    
-    <mc:ComparisonMicroChart 
-        id="zonasChart" 
-        size="M" 
-        width="100%"
-        height="120px"
-        data="{plan>/summary/zonas}">
-        <mc:data>
-            <mc:ComparisonMicroChartData 
-                title="{plan>Title}" 
-                value="{plan>Value}" 
-                displayValue="{plan>Value}%" 
-                color="{plan>Color}"/>
-        </mc:data>
-    </mc:ComparisonMicroChart>
-</VBox>
+                <ScrollContainer height="280px" vertical="true" horizontal="false" class="sapUiNoContentPadding">
+                    <mc:ComparisonMicroChart id="mecanicosChart" size="Responsive" width="100%" 
+                        isAllowedToOverflow="true" data="{plan>/summary/mecanicos}" press="onChartPress" minValue="0" maxValue="100">
+                        <mc:data>
+                            <mc:ComparisonMicroChartData title="{plan>Title}" value="{plan>Value}" displayValue="{plan>Value}%" color="{plan>Color}"/>
+                        </mc:data>
+                    </mc:ComparisonMicroChart>
+                </ScrollContainer>
+            </VBox>
 
-                    </FlexBox>
-                </Panel>
+            <VBox class="sapUiNoContentPadding" width="31%" style="margin-left: 1rem;">
+                <VBox style="background-color: #ebeef0; border-radius: 4px; padding: 0.5rem 0.8rem;" class="sapUiSmallMarginBottom">
+                    <HBox justifyContent="SpaceBetween" alignItems="Center">
+                        <HBox alignItems="Center">
+                            <core:Icon src="sap-icon://map-2" class="sapUiTinyMarginEnd" color="Default" size="1.1rem" />
+                            <Title text="Zonas" level="H5" titleStyle="H5" />
+                        </HBox>
+                        <ObjectStatus text="{= ${plan>/summary/zonas}.length } Áreas" state="None" />
+                    </HBox>
+                </VBox>
 
+                <ScrollContainer height="280px" vertical="true" horizontal="false" class="sapUiNoContentPadding">
+                    <mc:ComparisonMicroChart id="zonasChart" size="Responsive" width="100%" 
+                        isAllowedToOverflow="true" data="{plan>/summary/zonas}" press="onChartPress" minValue="0" maxValue="100">
+                        <mc:data>
+                            <mc:ComparisonMicroChartData title="{plan>Title}" value="{plan>Value}" displayValue="{plan>Value}%" color="{plan>Color}"/>
+                        </mc:data>
+                    </mc:ComparisonMicroChart>
+                </ScrollContainer>
+            </VBox>
+
+        </items>
+    </FlexBox>
+</Panel>
                 <Title text="Cronograma de Órdenes" level="H2" class="sapUiMediumMarginBottom" />
                 
                 <OverflowToolbar class="sapUiTinyMarginBottom">

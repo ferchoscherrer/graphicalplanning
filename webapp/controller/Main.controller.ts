@@ -345,6 +345,7 @@ private _computeSupervisorStats(aFilteredResults: any[]): void {
 
     // 3. Actualizamos modelo
     oPlanModel.setProperty("/summary/supervisors", aData);
+   // this._forceChartHeight("supervisorChart", aData.length);
 
     // 4. Forzamos refresco visual
     setTimeout(() => {
@@ -404,10 +405,12 @@ private _computeMecanicoStats(aFilteredResults: any[]): void {
             // Color según desempeño del mecánico
             Color: iRealPercent >= 80 ? "Good" : (iRealPercent >= 50 ? "Critical" : "Error")
         };
-    }); // Aquí NO filtramos por Value > 0 para que veas a todos los mecánicos asignados
+    }) // Aquí NO filtramos por Value > 0 para que veas a todos los mecánicos asignados
+    .sort((a, b) => b.Value - a.Value); // Orden descendente (Mayor a Menor)
 
     // Guardamos en la propiedad 'mecanicos' que definiste en el onInit
     oPlanModel.setProperty("/summary/mecanicos", aData);
+    //this._forceChartHeight("mecanicosChart", aData.length);
 
     setTimeout(() => {
         const oChart = oView.byId("mecanicosChart") as any;
@@ -467,12 +470,29 @@ private _computeZonaStats(aFilteredResults: any[]): void {
     });
 
     oPlanModel.setProperty("/summary/zonas", aData);
+    //this._forceChartHeight("zonasChart", aData.length);
 
     setTimeout(() => {
         const oChart = oView.byId("zonasChart") as any;
         if (oChart) {
             oChart.getBinding("data")?.refresh(true);
             oChart.invalidate(); 
+        }
+    }, 300);
+}
+
+private _forceChartHeight(sId: string, iCount: number): void {
+    setTimeout(() => {
+        const oChart = this.getView()!.byId(sId) as any;
+        if (oChart) {
+            // 55px es un buen alto para que la barra y el texto respiren
+            const iMinHeight = iCount * 55; 
+            oChart.setHeight(iMinHeight + "px");
+            
+            const oBinding = oChart.getBinding("data");
+            if (oBinding) {
+                oBinding.refresh(true);
+            }
         }
     }, 300);
 }

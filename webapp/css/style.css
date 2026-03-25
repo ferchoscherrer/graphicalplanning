@@ -314,3 +314,15 @@
     100% { outline: 3px solid rgba(255, 85, 0, 0.3); outline-offset: 0px; }
 }
 
+.customCardShadow {
+    background-color: #ffffff !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid #e5e5e5 !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+    padding: 10px !important;
+}
+
+/* Opcional: Para que el gráfico ocupe bien el espacio */
+.sapSuiteCMC {
+    padding: 10px 0 !important;
+}
