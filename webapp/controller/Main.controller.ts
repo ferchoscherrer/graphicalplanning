@@ -127,6 +127,55 @@ private _handleBeforeUnload(oEvent: BeforeUnloadEvent): void {
 }
 
 
+public onSupervisorChange(oEvent: any): void {
+    const sSelectedSup = oEvent.getParameter("selectedItem").getKey();
+    const oPlanModel = this.getView()!.getModel("plan") as JSONModel;
+    const aRawData = (this as any)._aRawResults || [];
+
+    // 1. Filtrar los datos originales por el supervisor seleccionado
+    const aFilteredBySup = sSelectedSup === "ALL" 
+        ? aRawData 
+        : aRawData.filter((o: any) => (o.NombreSup || o.Supervisor || "Sin Asignar") === sSelectedSup);
+
+    // 2. Mapear las órdenes filtradas para el Gantt
+    const aMappedOrders = aFilteredBySup.map((sapItem: any) => {
+        const dStartRaw = new Date(sapItem.StartDate);
+        const dEndRaw = new Date(sapItem.FinishDate);
+        const dStart = new Date(dStartRaw.getTime() + dStartRaw.getTimezoneOffset() * 60000);
+        const dEnd = new Date(dEndRaw.getTime() + dEndRaw.getTimezoneOffset() * 60000);
+        dStart.setHours(0, 0, 0, 0);
+        dEnd.setHours(0, 0, 0, 0);
+
+        const sNombre = sapItem.NombreMec || "Sin Asignar";
+        const sIdMecanico = sapItem.IdMecanico || "";
+        const sTechnicianFull = sIdMecanico ? `${sNombre} (${sIdMecanico})` : sNombre;
+
+        return {
+            id: (sapItem.Orderid || sapItem.Aufnr || "").replace(/^0+/, ""),
+            desc: sapItem.Description || sapItem.Ktext,
+            start: dStart,
+            end: dEnd,
+            status: this._mapFinalStatus(sapItem.SysStatus || "", sapItem.Userstatus || ""),
+            technician: sTechnicianFull,
+            equipment: sapItem.Equipment || sapItem.Equnr || "N/A",
+            customerName: sapItem.NombreCliente || sapItem.Name1 || "Sin Cliente"
+        };
+    });
+
+    // 3. Actualizar modelo y refrescar gráficas/Gantt
+    oPlanModel.setProperty("/orders", aMappedOrders);
+    
+    // Aquí es donde cambian los MicroCharts al seleccionar
+    this._computeMecanicoStats(aFilteredBySup);
+    this._computeZonaStats(aFilteredBySup);
+    
+    this._updateOrderSummary();
+    this._renderCustomGantt();
+    
+    MessageToast.show(`Mostrando mecánicos de: ${sSelectedSup === "ALL" ? "Todos" : sSelectedSup}`);
+}
+
+
 private _handleBrowserBack(oEvent: any): void {
     if (this._aPendingChanges && this._aPendingChanges.length > 0) {
         console.log("GanttLog: Intento de salida con cambios ->", this._aPendingChanges.length);
@@ -195,6 +244,13 @@ private async _loadDashboardData(): Promise<void> {
     const oView = this.getView();
     const oRange = this.byId("rangeSelection") as any; 
     
+    // --- NUEVO: Resetear el selector de supervisor al recargar ---
+    const oSelectSup = this.byId("selectSupervisor") as any;
+    if (oSelectSup) {
+        oSelectSup.setSelectedKey("ALL");
+    }
+    // -----------------------------------------------------------
+
     if (!oView || !this.oDataModel || !oRange) return;
 
     oView.setBusy(true); 
@@ -212,7 +268,7 @@ private async _loadDashboardData(): Promise<void> {
         oEndDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
     } else {
         oStartDate.setHours(0, 0, 0, 0);
-        oEndDate.setHours(0, 0, 0, 0); // <--- CAMBIO: Asegurar fin de día para el filtro
+        oEndDate.setHours(0, 0, 0, 0); 
     }
 
     oPlanModel.setProperty("/startDateProject", oStartDate);
@@ -233,7 +289,18 @@ private async _loadDashboardData(): Promise<void> {
                 return sType.toUpperCase() === "SM02";
             });
 
-            // 1. Mapeo de órdenes (Mantenemos tu lógica)
+            // Guardamos los resultados originales para el filtrado posterior
+            (this as any)._aRawResults = aFilteredResults; 
+
+            // Extraemos supervisores únicos
+            const aSupervisors = [...new Set(aFilteredResults.map((o: any) => o.NombreSup || o.Supervisor || "Sin Asignar"))] as string[];
+            
+            const aSupervisorsList = [{ key: "ALL", text: "Todos los Supervisores" }].concat(
+                aSupervisors.map((s: string) => ({ key: s, text: s }))
+            );
+            oPlanModel.setProperty("/supervisorsList", aSupervisorsList);
+
+            // Mapeo de órdenes
             const aMappedOrders: MaintenanceOrder[] = aFilteredResults.map((sapItem: any) => {
                 const dStartRaw = new Date(sapItem.StartDate);
                 const dEndRaw = new Date(sapItem.FinishDate);
@@ -260,16 +327,13 @@ private async _loadDashboardData(): Promise<void> {
                 };
             });
 
-            // 2. Actualizar órdenes primero
             oPlanModel.setProperty("/orders", aMappedOrders);
             
-            // 3. PROCESAMIENTO DE MICROCHARTS <--- CAMBIO: Se ejecuta DESPUÉS de tener aMappedOrders
-            // Pasamos aFilteredResults para tener acceso a Userstatus original
+            // Procesamiento de MicroCharts (con todos los datos)
             this._computeSupervisorStats(aFilteredResults); 
             this._computeMecanicoStats(aFilteredResults);
             this._computeZonaStats(aFilteredResults);
 
-            // 4. Actualización de contadores y Gantt
             this._updateOrderSummary();
             this._renderCustomGantt();
         }
@@ -281,6 +345,7 @@ private async _loadDashboardData(): Promise<void> {
         oView.setBusy(false);
     }
 }
+
 
 /**
  * NUEVA FUNCIÓN: Procesa estadísticas de supervisores basándose en los resultados de SM02

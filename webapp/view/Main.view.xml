@@ -84,6 +84,14 @@
                 <OverflowToolbar class="sapUiTinyMarginBottom">
                     <Label text="Periodo de Planificación:" />
                     <DateRangeSelection id="rangeSelection" width="250px" change="._loadDashboardData" displayFormat="dd/MM/yyyy"/>
+                    <Label text="Supervisor:" />
+<Select 
+    id="selectSupervisor" 
+    width="200px" 
+    items="{plan>/supervisorsList}" 
+    change=".onSupervisorChange">
+    <core:Item key="{plan>key}" text="{plan>text}" />
+</Select>
                     
                     <ToolbarSeparator />
                     
