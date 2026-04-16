@@ -445,6 +445,8 @@ private _computeSupervisorStats(aFilteredResults: any[]): void {
     }, 300);
 }
 
+
+/*
 private _computeMecanicoStats(aFilteredResults: any[]): void {
     const oView = this.getView();
     if (!oView) return;
@@ -501,6 +503,72 @@ private _computeMecanicoStats(aFilteredResults: any[]): void {
 
     setTimeout(() => {
         const oChart = oView.byId("mecanicosChart") as any;
+        if (oChart) {
+            oChart.getBinding("data")?.refresh(true);
+            oChart.invalidate(); 
+        }
+    }, 300);
+}
+
+*/
+
+private _computeMecanicoStats(aFilteredResults: any[]): void {
+    const oPlanModel = this.getView()!.getModel("plan") as any;
+    const mGroups: any = {};
+
+    // 1. Agrupar y contar órdenes por mecánico
+    aFilteredResults.forEach(oItem => {
+        const sName = oItem.NombreMec || oItem.Technician || "Sin Asignar";
+        const sStatus = oItem.Userstatus || "";
+
+        if (!mGroups[sName]) {
+            mGroups[sName] = { u100: 0, u200: 0, u300: 0, u400: 0, u900: 0, u901: 0, total: 0 };
+        }
+        
+        mGroups[sName].total++;
+        switch (sStatus) {
+            case "0100": mGroups[sName].u100++; break;
+            case "0200": mGroups[sName].u200++; break;
+            case "0300": mGroups[sName].u300++; break;
+            case "0400": mGroups[sName].u400++; break;
+            case "0900": mGroups[sName].u900++; break;
+            default: mGroups[sName].u901++; break;
+        }
+    });
+
+    // 2. Mapear a porcentajes
+    const aData = Object.keys(mGroups).map((sKey) => {
+        const g = mGroups[sKey];
+        const iTotal = g.total || 1; // Evitar división por cero
+        
+        // Función auxiliar para redondear el porcentaje
+        const fnPct = (val: number) => Math.round((val / iTotal) * 100);
+
+        return {
+            Name: sKey,
+            Total: iTotal,
+            // Guardamos el string ya formateado con %
+            u100Pct: fnPct(g.u100) + "%",
+            u200Pct: fnPct(g.u200) + "%",
+            u300Pct: fnPct(g.u300) + "%",
+            u400Pct: fnPct(g.u400) + "%",
+            sapPct: fnPct(g.u900 + g.u901) + "%",
+            total: iTotal
+        };
+    }).sort((a, b) => a.Name.localeCompare(b.Name));
+
+    oPlanModel.setProperty("/summary/mecanicos", aData);
+}
+
+
+
+
+
+
+// Función auxiliar para refrescar
+private _refreshChart(sId: string): void {
+    setTimeout(() => {
+        const oChart = this.getView()!.byId(sId) as any;
         if (oChart) {
             oChart.getBinding("data")?.refresh(true);
             oChart.invalidate(); 
@@ -1218,23 +1286,31 @@ public onSearchGantt(oEvent: any): void {
 /**
  * Oculta los encabezados de mecánicos que no tengan órdenes visibles
  */
+
+
 private _updateTechHeadersVisibility(): void {
     const aHeaders = document.getElementsByClassName("gantt-tech-header");
+    
     for (let i = 0; i < aHeaders.length; i++) {
         const oHeader = aHeaders[i] as HTMLElement;
         let oNextElement = oHeader.nextElementSibling as HTMLElement;
         let bHasVisibleOrders = false;
 
-        // Revisamos las filas siguientes hasta el próximo encabezado
-        while (oNextElement && !oNextElement.classList.contains("gantt-tech-header")) {
-            if (oNextElement.style.display !== "none") {
+        // Recorremos todos los oRow que siguen al encabezado hasta encontrar el siguiente encabezado
+        while (oNextElement && oNextElement.classList.contains("gantt-row-custom")) {
+            if (oNextElement.getAttribute("data-visible") === "true") {
                 bHasVisibleOrders = true;
                 break;
             }
             oNextElement = oNextElement.nextElementSibling as HTMLElement;
         }
 
-        oHeader.style.display = bHasVisibleOrders ? "flex" : "none";
+        // Si el mecánico no tiene órdenes que coincidan, ocultamos el encabezado por completo
+        if (bHasVisibleOrders) {
+            oHeader.style.display = "flex";
+        } else {
+            oHeader.style.display = "none";
+        }
     }
 }
 
@@ -1397,10 +1473,15 @@ private _applyCombinedFilters(): void {
     const oSearchField = this.byId("searchOrders") as any;
     const sQuery = oSearchField ? oSearchField.getValue().toLowerCase() : "";
     const oContainer = document.getElementById("realGanttId");
+    const oModel = this.getView()!.getModel("plan") as JSONModel;
+    const aOrders = oModel.getProperty("/orders") || [];
     
     if (!oContainer) return;
 
     const aRows = oContainer.getElementsByClassName("gantt-row-custom");
+
+    // Inicializamos contadores temporales para el filtrado
+    const oFilteredCounters = { u100: 0, u200: 0, u300: 0, u400: 0, u900: 0, u901: 0, total: 0 };
 
     for (let i = 0; i < aRows.length; i++) {
         const oRow = aRows[i] as HTMLElement;
@@ -1408,26 +1489,49 @@ private _applyCombinedFilters(): void {
         
         if (!oBar) continue;
 
-        const sContent = oBar.innerText.toLowerCase();
+        const sBarText = oBar.innerText.toLowerCase();
+        const sOrderId = sBarText.match(/orden:\s*(\d+)/)?.[1] || "";
+        const oOrderData = aOrders.find((o: any) => o.id.replace(/^0+/, "") === sOrderId);
         
-        // CONDICIÓN 1: Coincidencia de texto
-        const bMatchesSearch = sContent.includes(sQuery);
+        const sTechName = oOrderData ? oOrderData.technician.toLowerCase() : "";
+        const sFullSearchContent = sBarText + " " + sTechName;
         
-        // CONDICIÓN 2: Coincidencia de estatus (si no hay filtro, pasan todas)
+        const bMatchesSearch = sFullSearchContent.includes(sQuery);
         const bMatchesStatus = !this._sCurrentStatusFilter || oBar.classList.contains(this._sCurrentStatusFilter);
 
         if (bMatchesSearch && bMatchesStatus) {
             oRow.style.display = "flex";
+            oRow.setAttribute("data-visible", "true");
             oBar.style.opacity = "1";
-            // Efecto de brillo si hay una búsqueda de texto activa
-            oBar.style.boxShadow = (sQuery !== "") ? "0 0 15px #ccff00" : "none";
+            
+            // SI LA ORDEN ES VISIBLE, LA SUMAMOS AL CONTADOR DINÁMICO
+            if (oOrderData) {
+                oFilteredCounters.total++;
+                switch (oOrderData.status) {
+                    case "status-u100": oFilteredCounters.u100++; break;
+                    case "status-u200": oFilteredCounters.u200++; break;
+                    case "status-u300": oFilteredCounters.u300++; break;
+                    case "status-u400": oFilteredCounters.u400++; break;
+                    case "status-u900": oFilteredCounters.u900++; break;
+                    default: oFilteredCounters.u901++; break;
+                }
+            }
         } else {
             oRow.style.display = "none";
+            oRow.setAttribute("data-visible", "false");
         }
     }
 
-    // Actualiza los encabezados de mecánicos (oculta los que se quedaron sin órdenes visibles)
+    // ACTUALIZAR EL MODELO CON LOS NUEVOS TOTALES FILTRADOS
+    const oCurrentSummary = oModel.getProperty("/summary") || {};
+    const oFinalSummary = Object.assign({}, oCurrentSummary, oFilteredCounters);
+    oModel.setProperty("/summary", oFinalSummary);
+
     this._updateTechHeadersVisibility();
 }
+
+
+
+
 
 }

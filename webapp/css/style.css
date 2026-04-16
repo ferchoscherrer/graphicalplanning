@@ -361,3 +361,17 @@
     padding-left: 15px;
     margin-left: 10px;
 }
+
+.status-pill.sapMObjStatusInverted .sapMObjStatusBG {
+    background-color: inherit !important;
+    border-left: inherit !important;
+    padding: 0 8px;
+    border-radius: 4px;
+    min-width: 25px;
+    text-align: center;
+}
+
+/* Forzar color de texto blanco para los estados oscuros */
+.status-u100, .status-u200, .status-u300, .status-u400 {
+    color: white !important;
+}

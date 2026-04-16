@@ -34,26 +34,52 @@
                 </ScrollContainer>
             </VBox>
 
-            <VBox class="sapUiNoContentPadding" width="31%" style="border-right: 1px solid #d9d9d9; padding-right: 1.5rem; margin-left: 1rem;">
-                <VBox style="background-color: #ebeef0; border-radius: 4px; padding: 0.5rem 0.8rem;" class="sapUiSmallMarginBottom">
-                    <HBox justifyContent="SpaceBetween" alignItems="Center">
-                        <HBox alignItems="Center">
-                            <core:Icon src="sap-icon://wrench" class="sapUiTinyMarginEnd" color="Default" size="1.1rem" />
-                            <Title text="Mecánicos" level="H5" titleStyle="H5" />
-                        </HBox>
-                        <ObjectStatus text="{= ${plan>/summary/mecanicos}.length } Técnicos" state="None" />
-                    </HBox>
-                </VBox>
+            
 
-                <ScrollContainer height="280px" vertical="true" horizontal="false" class="sapUiNoContentPadding">
-                    <mc:ComparisonMicroChart id="mecanicosChart" size="Responsive" width="100%" 
-                        isAllowedToOverflow="true" data="{plan>/summary/mecanicos}" press="onChartPress" minValue="0" maxValue="100">
-                        <mc:data>
-                            <mc:ComparisonMicroChartData title="{plan>Title}" value="{plan>Value}" displayValue="{plan>Value}%" color="{plan>Color}"/>
-                        </mc:data>
-                    </mc:ComparisonMicroChart>
-                </ScrollContainer>
-            </VBox>
+
+<VBox class="sapUiNoContentPadding" width="31%" style="border-right: 1px solid #d9d9d9; padding-right: 1.5rem; margin-left: 1rem;">
+    <VBox style="background-color: #ebeef0; border-radius: 4px; padding: 0.5rem 0.8rem;" class="sapUiSmallMarginBottom">
+        <HBox justifyContent="SpaceBetween" alignItems="Center">
+            <HBox alignItems="Center">
+                <core:Icon src="sap-icon://wrench" class="sapUiTinyMarginEnd" color="Default" size="1.1rem" />
+                <Title text="Mecánicos" level="H5" titleStyle="H5" />
+            </HBox>
+            <ObjectStatus text="{= ${plan>/summary/mecanicos}.length } Técnicos" state="None" />
+        </HBox>
+    </VBox>
+
+    <ScrollContainer height="280px" vertical="true" horizontal="false" class="sapUiNoContentPadding">
+        <Table items="{plan>/summary/mecanicos}" sticky="ColumnHeaders" class="sapUiNoContentPadding customStatsTable">
+    <columns>
+        <Column width="45%"><Text text="Mecánico" /></Column>
+        <Column hAlign="Center"><Text text="Pte" /></Column>
+        <Column hAlign="Center"><Text text="Proc" /></Column>
+        <Column hAlign="Center"><Text text="Fin" /></Column>
+        <Column hAlign="Center"><Text text="PteFir" /></Column>
+        <Column hAlign="Center"><Text text="Plan" /></Column>
+        <Column hAlign="Center"><Text text="Total" /></Column>
+    </columns>
+    <items>
+        <ColumnListItem>
+            <cells>
+                <Text text="{plan>Name}" wrapping="false" fontStyle="Italic" />
+                
+                <ObjectStatus text="{plan>u100Pct}" class="status-u100 status-pill" inverted="true" />
+                <ObjectStatus text="{plan>u200Pct}" class="status-u200 status-pill" inverted="true" />
+                <ObjectStatus text="{plan>u300Pct}" class="status-u300 status-pill" inverted="true" />
+                <ObjectStatus text="{plan>u400Pct}" class="status-u400 status-pill" inverted="true" />
+                <ObjectStatus text="{plan>sapPct}" class="status-u900 status-pill" inverted="true" />
+                <ObjectStatus text="{plan>total}" state="None" />
+            </cells>
+        </ColumnListItem>
+    </items>
+</Table>
+    </ScrollContainer>
+</VBox>
+
+
+
+
 
             <VBox class="sapUiNoContentPadding" width="31%" style="margin-left: 1rem;">
                 <VBox style="background-color: #ebeef0; border-radius: 4px; padding: 0.5rem 0.8rem;" class="sapUiSmallMarginBottom">
