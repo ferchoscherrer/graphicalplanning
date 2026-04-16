@@ -235,13 +235,13 @@
 .status-u400 { background-color: #9b59b6 !important; border-left: 5px solid #8e44ad; } /* Púrpura */
 
 /* --- COLORES PARA SYS STATUS (Prioridad Baja / Fallback) --- */
-.status-abie { 
+.status-u900 { 
     background-color: #fef9e7 !important; /* Fondo amarillo crema (Warning) */
     color: #b9770e !important;            /* Texto naranja/café oscuro para legibilidad */
     border: 1px solid #f1c40f !important;  /* Borde amarillo intenso */
     border-left: 5px solid #f1c40f !important; /* Acento lateral más grueso para resaltar */
 }
-.status-abie .bar-id {
+.status-u900 .bar-id {
     color: #b9770e; /* Un tono café/naranja oscuro para que contraste con el fondo amarillo */
 }
 .status-default { background-color: #bdc3c7 !important; }
@@ -325,4 +325,39 @@
 /* Opcional: Para que el gráfico ocupe bien el espacio */
 .sapSuiteCMC {
     padding: 10px 0 !important;
+}
+
+.clickeable {
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.clickeable:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+
+/* Opcional: Resaltar el filtro activo en la leyenda */
+.filter-active {
+    border: 2px solid #0070f2;
+    background-color: #e1f0ff;
+}
+
+.status-all {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 24px;
+    border-radius: 4px;
+    background-color: #34495e;
+    color: white;
+    padding: 0 5px;
+}
+
+.total-orders-btn {
+    border-left: 1px solid #ddd;
+    padding-left: 15px;
+    margin-left: 10px;
 }

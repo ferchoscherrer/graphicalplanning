@@ -5,7 +5,7 @@
     {
       "source": "^/sap/(.*)$",
       "target": "/sap/$1",
-      "destination": "onPremECC_PRO",
+      "destination": "onPremECC_QAS",
       "authenticationType": "none",
       "csrfProtection": false
     },

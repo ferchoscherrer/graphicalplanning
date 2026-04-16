@@ -92,6 +92,7 @@
     change=".onSupervisorChange">
     <core:Item key="{plan>key}" text="{plan>text}" />
 </Select>
+
                     
                     <ToolbarSeparator />
                     
@@ -128,33 +129,51 @@
                 </OverflowToolbar>
 
                 <HBox class="gantt-legend sapUiSmallMarginBottom" wrap="Wrap" justifyContent="Start" alignItems="Center">
-                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd clickeable" press=".onFilterByStatus">
+                    <customData>
+        <core:CustomData key="status" value="status-u100" />
+    </customData>
                         <core:HTML content='&lt;div class="legend-box status-u100"&gt;{plan>/summary/u100}&lt;/div&gt;' />
                         <Text text="Orden Pendiente" class="sapUiTinyMarginBegin" />
                     </HBox>
                     
-                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd clickeable" press=".onFilterByStatus">
+                    <customData>
+        <core:CustomData key="status" value="status-u200" />
+    </customData>
                         <core:HTML content='&lt;div class="legend-box status-u200"&gt;{plan>/summary/u200}&lt;/div&gt;' />
                         <Text text="Orden En proceso" class="sapUiTinyMarginBegin" />
                     </HBox>
                     
-                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd clickeable" press=".onFilterByStatus">
+                    <customData>
+        <core:CustomData key="status" value="status-u300" />
+    </customData>
                         <core:HTML content='&lt;div class="legend-box status-u300"&gt;{plan>/summary/u300}&lt;/div&gt;' />
                         <Text text="Orden Finalizada" class="sapUiTinyMarginBegin" />
                     </HBox>
                     
-                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd clickeable" press=".onFilterByStatus">
+                    <customData>
+        <core:CustomData key="status" value="status-u400" />
+    </customData>
                         <core:HTML content='&lt;div class="legend-box status-u400"&gt;{plan>/summary/u400}&lt;/div&gt;' />
                         <Text text="Orden Pendiente de firma" class="sapUiTinyMarginBegin" />
                     </HBox>
                     
-                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
-                        <core:HTML content='&lt;div class="legend-box status-abie" style="font-size:12px; color:#b9770e;"&gt;⚠️ {plan>/summary/abie}&lt;/div&gt;' />
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd clickeable" press=".onFilterByStatus">
+                    <customData>
+        <core:CustomData key="status" value="status-u900" />
+    </customData>
+                        <core:HTML content='&lt;div class="legend-box status-u900" style="font-size:12px; color:#b9770e;"&gt;⚠️ {plan>/summary/u900}&lt;/div&gt;' />
                         <Text text="Orden Planificada SAP" class="sapUiTinyMarginBegin" />
                     </HBox>
 
-                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd">
-                        <core:HTML content='&lt;div class="legend-box status-default"&gt;{plan>/summary/others}&lt;/div&gt;' />
+                    <HBox alignItems="Center" class="legend-item sapUiSmallMarginEnd clickeable" press=".onFilterByStatus">
+                    <customData>
+        <core:CustomData key="status" value="status-u901" />
+    </customData>
+                        <core:HTML content='&lt;div class="legend-box status-default"&gt;{plan>/summary/u901}&lt;/div&gt;' />
                         <Text text="Orden Liberada SAP Y BTP" class="sapUiTinyMarginBegin" />
                     </HBox>
                     
@@ -162,6 +181,15 @@
                         <core:HTML content='&lt;div class="legend-box order-changed" style="background:#666; color:white; font-size:10px; font-weight:bold; display:flex; justify-content:center; align-items:center;"&gt;{plan>/summary/changed}&lt;/div&gt;' />
                         <Text text="Cambio sin guardar" class="sapUiTinyMarginBegin" />
                     </HBox>
+                    <HBox alignItems="Center" 
+          class="legend-item sapUiSmallMarginEnd clickeable total-orders-btn" 
+          press=".onFilterByStatus">
+        <customData>
+            <core:CustomData key="status" value="all" />
+        </customData>
+        <core:HTML content='&lt;div class="legend-box status-all" style="background-color: #5c5c5c; color: white; font-weight: bold;"&gt;{plan>/summary/total}&lt;/div&gt;' />
+        <Text text="Total de Órdenes" class="sapUiTinyMarginBegin" style="font-weight: bold;" />
+    </HBox>
                 </HBox>
 
                 <ScrollContainer busy="{plan>/isBusy}" width="100%" height="900px" horizontal="true" vertical="true">

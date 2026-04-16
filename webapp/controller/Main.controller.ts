@@ -12,6 +12,7 @@ import ODataModel from "sap/ui/model/odata/v2/ODataModel";
 import MessageView from "sap/m/MessageView";
 import MessageItem from "sap/m/MessageItem";
 import Dialog from "sap/m/Dialog";
+import Control from "sap/ui/core/Control";
 
 /**
  * @namespace graphicalplanning.controller
@@ -22,6 +23,7 @@ export default class Main extends Controller {
     private _aPendingChanges: any[] = [];
     private ZCS_RESCHEDULE_WORKORDER_SRV: ODataModel;
     private oRescheduleModel: any;
+    private _sCurrentStatusFilter: string | null = null;
 
     // *** NUEVO: Referencia para controlar el evento de navegación correctamente ***
     private _fnNavigationHandler: any;
@@ -53,7 +55,7 @@ public onInit(): void {
         orders: [],
         isBusy: true,
         // *** CAMBIO: Inicialización de la estructura de resumen para los contadores ***
-        summary: { u100: 0, u200: 0, u300: 0, u400: 0, abie: 0, others: 0, changed: 0,
+        summary: { u100: 0, u200: 0, u300: 0, u400: 0, u900: 0, u901: 0, changed: 0,
             // NUEVO: Arreglos vacíos para los MicroCharts
             supervisors: [],
             mecanicos: [],
@@ -210,14 +212,16 @@ private _updateOrderSummary(): void {
 
     const oPlanModel = oView.getModel("plan") as JSONModel;
     const aOrders = oPlanModel.getProperty("/orders") || [];
+    console.log (aOrders)
     
     // 1. Obtenemos el objeto summary actual para NO borrar lo que ya tiene (como supervisors)
     const oCurrentSummary = oPlanModel.getProperty("/summary") || {};
 
     // 2. Creamos los nuevos contadores
     const oNewCounters = {
-        u100: 0, u200: 0, u300: 0, u400: 0, abie: 0, others: 0,
-        changed: (this as any)._aPendingChanges ? (this as any)._aPendingChanges.length : 0
+        u100: 0, u200: 0, u300: 0, u400: 0, u900: 0, u901: 0,
+        changed: (this as any)._aPendingChanges ? (this as any)._aPendingChanges.length : 0,
+        total: aOrders.length
     };
 
     aOrders.forEach((oOrder: any) => {
@@ -226,8 +230,8 @@ private _updateOrderSummary(): void {
             case "status-u200": oNewCounters.u200++; break;
             case "status-u300": oNewCounters.u300++; break;
             case "status-u400": oNewCounters.u400++; break;
-            case "status-abie": oNewCounters.abie++; break;
-            default: oNewCounters.others++; break;
+            case "status-u900": oNewCounters.u900++; break;
+            default: oNewCounters.u901++; break;
         }
     });
 
@@ -283,7 +287,23 @@ private async _loadDashboardData(): Promise<void> {
         const oResponse = await ERP.getDataERP("/WorkOrderHeaderSet", this.oDataModel, aFilters);
         
         if (oResponse?.data?.results) {
-            const aRawResults = oResponse.data.results;
+            let aRawResults = oResponse.data.results;
+            aRawResults = aRawResults.map((item: any) => {
+                const sUserStatus = item.Userstatus || "";
+                const sSysStatus = (item.SysStatus || "").toUpperCase();
+
+                if (sUserStatus === "") {
+                    if (sSysStatus.includes("ABIE")) {
+                        item.Userstatus = "0900"; // Inyectamos el código
+                    } else if (sSysStatus.includes("LIB")) {
+                        item.Userstatus = "0901"; // Inyectamos el código
+                    }
+                }
+                return item;
+            });
+
+
+
             const aFilteredResults = aRawResults.filter((item: any) => {
                 const sType = item.OrderType || item.Auart || "";
                 return sType.toUpperCase() === "SM02";
@@ -314,6 +334,8 @@ private async _loadDashboardData(): Promise<void> {
                 const sIdMecanico = sapItem.IdMecanico || "";
                 const sTechnicianFull = sIdMecanico ? `${sNombre} (${sIdMecanico})` : sNombre;
                 const sCleanId = (sapItem.Orderid || sapItem.Aufnr || "").replace(/^0+/, "");
+                let sUserStatus = sapItem.Userstatus || "";
+            
 
                 return {
                     id: sCleanId,
@@ -493,7 +515,9 @@ private _computeZonaStats(aFilteredResults: any[]): void {
     const oPlanModel = oView.getModel("plan") as any;
     const mGroups: any = {};
     const aAuditLog: any[] = [];
-
+    console.log("Filters")
+    console.log(aFilteredResults)
+    
     aFilteredResults.forEach(oItem => {
         // AJUSTE: Usa el campo que represente la Zona/Emplazamiento en tu OData
         const sName = oItem.Base || oItem.Zona || "Sin Zona";
@@ -591,9 +615,12 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
             case "0200": return "status-u200"; // En proceso
             case "0300": return "status-u300"; // Finalizada
             case "0400": return "status-u400"; // Pendiente firma
+            case "0900": return "status-u900"; // Reutiliza color de Abierta
+            case "0901": return "status-u901";
             default: return "status-default";
         }
-    }
+    }   
+    
 
     // --- PRIORIDAD 2: Estatus de Sistema (Si UserStatus está vacío) ---
     if (sSys.includes("ABIE")) return "status-abie"; // Azul
@@ -603,8 +630,21 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
     private _mCollapsedGroups: { [key: string]: boolean } = {};
 
     public onAfterRendering(): void {
-        this._renderCustomGantt();
-    }
+    this._renderCustomGantt();
+
+    // 1. Obtenemos todos los elementos descendientes
+    const aElements = this.getView()?.findElements(true) || [];
+    
+    aElements.forEach(oElement => {
+        // 2. Verificamos si el elemento es un Control (donde existe hasStyleClass)
+        if (oElement instanceof Control && oElement.hasStyleClass("clickeable")) {
+            // 3. Adjuntamos el evento de forma segura
+            oElement.attachBrowserEvent("click", () => {
+                this.onFilterByStatus(oElement);
+            });
+        }
+    });
+}
 
     private _renderCustomGantt(): void {
     const oView = this.getView();
@@ -654,14 +694,15 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
         
         // *** NUEVO: Calcular resumen de estados para este mecánico específico ***
         const aOrdersByTech = mGroups[techName];
-        const oT = { u100: 0, u200: 0, u300: 0, u400: 0, abie: 0 };
+        const oT = { u100: 0, u200: 0, u300: 0, u400: 0, u900: 0, u901: 0 };
         
         aOrdersByTech.forEach((o: any) => {
             if (o.status === "status-u100") oT.u100++;
             else if (o.status === "status-u200") oT.u200++;
             else if (o.status === "status-u300") oT.u300++;
             else if (o.status === "status-u400") oT.u400++;
-            else if (o.status === "status-abie") oT.abie++;
+            else if (o.status === "status-u900") oT.u900++;
+            else if (o.status === "status-u901") oT.u901++;
         });
 
         // Fila de encabezado de Mecánico
@@ -686,7 +727,7 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
                     ${oT.u200 > 0 ? `<div class="legend-box status-u200" style="min-width:22px; height:22px; font-size:10px; margin:0;" title="En Proceso">${oT.u200}</div>` : ''}
                     ${oT.u300 > 0 ? `<div class="legend-box status-u300" style="min-width:22px; height:22px; font-size:10px; margin:0;" title="Finalizada">${oT.u300}</div>` : ''}
                     ${oT.u400 > 0 ? `<div class="legend-box status-u400" style="min-width:22px; height:22px; font-size:10px; margin:0;" title="Pte. Firma">${oT.u400}</div>` : ''}
-                    ${oT.abie > 0 ? `<div class="legend-box status-abie" style="min-width:22px; height:22px; font-size:10px; margin:0; color:#b9770e;" title="Abierta">${oT.abie}</div>` : ''}
+                    ${oT.u900 > 0 ? `<div class="legend-box status-u900" style="min-width:22px; height:22px; font-size:10px; margin:0; color:#b9770e;" title="Abierta">${oT.u900}</div>` : ''}
                     <span style="font-size: 0.7rem; opacity: 0.8; margin-left: 5px;">(${aOrdersByTech.length})</span>
                 </div>
             </div>
@@ -764,8 +805,9 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
         oContainer.appendChild(oTodayLine);
         
         const oSearchField = this.byId("searchOrders") as any;
-        if (oSearchField && oSearchField.getValue()) {
-            this.onSearchGantt({ getParameter: () => oSearchField.getValue() });
+        if (oSearchField && (oSearchField.getValue() || this._sCurrentStatusFilter)) {
+    // Llamamos directamente a la lógica unificada sin pasar parámetros falsos
+    this._applyCombinedFilters();
         }
 
         // *** CAMBIO: Scroll automático a la fecha actual (Hoy) ***
@@ -781,6 +823,9 @@ private _mapFinalStatus(sSysStatus: string, sUserStatus: string): string {
         }, 700);
     }
 }
+
+
+
     // ESTA ES LA FUNCIÓN QUE FALTABA
     private _attachDragEvents(oBar: HTMLElement, oOrder: MaintenanceOrder, dStartProject: Date, iDayWidth: number): void {
         let oTooltip = document.getElementById("gantt-tooltip");
@@ -1124,6 +1169,8 @@ private _getWeekNumber(d: Date): number {
     return Math.floor(diffInMs / (1000 * 60 * 60 * 24));
 }
 
+
+/*
 public onSearchGantt(oEvent: any): void {
     const sQuery = oEvent.getParameter("newValue").toLowerCase();
     const oContainer = document.getElementById("realGanttId");
@@ -1162,6 +1209,10 @@ public onSearchGantt(oEvent: any): void {
 
     // También debemos manejar los encabezados de los técnicos
     this._updateTechHeadersVisibility();
+}
+    */
+   public onSearchGantt(): void {
+    this._applyCombinedFilters();
 }
 
 /**
@@ -1222,7 +1273,7 @@ public async onExportExcel(): Promise<void> {
                 case "status-u200": return "Orden En proceso";
                 case "status-u300": return "Orden Finalizada";
                 case "status-u400": return "Orden Pendiente de firma";
-                case "status-abie": return "Orden Planificada SAP";
+                case "status-u900": return "Orden Planificada SAP";
                 default: return "Orden Liberada SAP Y BTP";
             }
         };
@@ -1250,8 +1301,10 @@ public async onExportExcel(): Promise<void> {
             { "Indicador": "En Proceso", "Total": oSummary.u200 },
             { "Indicador": "Finalizadas", "Total": oSummary.u300 },
             { "Indicador": "Pendiente Firma", "Total": oSummary.u400 },
-            { "Indicador": "Abiertas", "Total": oSummary.abie },
-            { "Indicador": "Cambios sin Guardar", "Total": oSummary.changed }
+            { "Indicador": "Abiertas", "Total": oSummary.u900 },
+            { "Indicador": "Orden Liberada SAP Y BTP", "Total": oSummary.u901 },
+            { "Indicador": "Cambios sin Guardar", "Total": oSummary.changed },
+            { "Indicador": "Total de Órdenes", "Total": oSummary.total }
         ];
         const wsDashboard = XLSX.utils.json_to_sheet(aDashboard);
 
@@ -1301,6 +1354,80 @@ public onCollapseAll(): void {
     });
 
     this._renderCustomGantt();
+}
+
+public onFilterByStatus(oSource: any): void {
+    const sStatus = oSource.data("status");
+    if (!sStatus) return;
+
+    // Si hace clic en "Total" o si hace toggle sobre el mismo estatus
+    if (sStatus === "all" || this._sCurrentStatusFilter === sStatus) {
+        this._sCurrentStatusFilter = null;
+        
+        // Limpiar visualmente todos los botones
+        const aElements = this.getView()?.findElements(true) || [];
+        aElements.forEach(oEl => {
+            if (oEl instanceof Control && oEl.hasStyleClass("clickeable")) {
+                oEl.removeStyleClass("filter-active");
+            }
+        });
+    } else {
+        // Lógica normal de filtrado que ya tienes
+        const aElements = this.getView()?.findElements(true) || [];
+        aElements.forEach(oEl => {
+            if (oEl instanceof Control && oEl.hasStyleClass("clickeable")) {
+                oEl.removeStyleClass("filter-active");
+            }
+        });
+        
+        this._sCurrentStatusFilter = sStatus;
+        oSource.addStyleClass("filter-active");
+    }
+
+    this._applyCombinedFilters();
+}
+
+/**
+ * Nueva función centralizadora de filtros (Buscador + Estatus)
+ */
+/**
+ * Aplica los filtros de búsqueda y estatus de forma combinada
+ */
+private _applyCombinedFilters(): void {
+    const oSearchField = this.byId("searchOrders") as any;
+    const sQuery = oSearchField ? oSearchField.getValue().toLowerCase() : "";
+    const oContainer = document.getElementById("realGanttId");
+    
+    if (!oContainer) return;
+
+    const aRows = oContainer.getElementsByClassName("gantt-row-custom");
+
+    for (let i = 0; i < aRows.length; i++) {
+        const oRow = aRows[i] as HTMLElement;
+        const oBar = oRow.querySelector(".gantt-bar-custom") as HTMLElement;
+        
+        if (!oBar) continue;
+
+        const sContent = oBar.innerText.toLowerCase();
+        
+        // CONDICIÓN 1: Coincidencia de texto
+        const bMatchesSearch = sContent.includes(sQuery);
+        
+        // CONDICIÓN 2: Coincidencia de estatus (si no hay filtro, pasan todas)
+        const bMatchesStatus = !this._sCurrentStatusFilter || oBar.classList.contains(this._sCurrentStatusFilter);
+
+        if (bMatchesSearch && bMatchesStatus) {
+            oRow.style.display = "flex";
+            oBar.style.opacity = "1";
+            // Efecto de brillo si hay una búsqueda de texto activa
+            oBar.style.boxShadow = (sQuery !== "") ? "0 0 15px #ccff00" : "none";
+        } else {
+            oRow.style.display = "none";
+        }
+    }
+
+    // Actualiza los encabezados de mecánicos (oculta los que se quedaron sin órdenes visibles)
+    this._updateTechHeadersVisibility();
 }
 
 }
